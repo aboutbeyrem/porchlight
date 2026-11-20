@@ -1,0 +1,11 @@
+name: An idea
+description: Something Porchlight should check, explain better, or do differently.
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: The problem you ran into first, then the idea. "I wanted to know X, but Porchlight didn't tell me" is perfect.
+    validations:
+      required: true

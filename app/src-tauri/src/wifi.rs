@@ -17,6 +17,7 @@ extern "system" {
     fn WlanGetProfileList(handle: isize, guid: *const u8, reserved: *const c_void, list: *mut *mut u8) -> u32;
     fn WlanGetProfile(handle: isize, guid: *const u8, name: *const u16, reserved: *const c_void, xml: *mut *mut u16, flags: *mut u32, access: *mut u32) -> u32;
     fn WlanFreeMemory(memory: *const c_void);
+    fn WlanRegisterNotification(handle: isize, source: u32, ignore_duplicate: i32, callback: Option<unsafe extern "system" fn(*const Note, *mut c_void)>, context: *const c_void, reserved: *const c_void, previous: *mut u32) -> u32;
 }
 
 // Layouts of the Wi-Fi API's structures (x64), read by offset.
@@ -219,6 +220,8 @@ pub fn strength(p: &str) -> i32 {
 pub struct Connection {
     pub ssid: String,
     pub bssid: String,
+    /// Signal quality, 0 to 100.
+    pub quality: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -265,9 +268,16 @@ fn read_bss(w: &Wlan, guid: &[u8; 16]) -> Vec<AccessPoint> {
         if WlanGetNetworkBssList(w.0, guid.as_ptr(), ptr::null(), 3, 0, ptr::null(), &mut list) != 0 || list.is_null() {
             return out;
         }
+        // Never read past the buffer Windows handed back, even if an entry claims otherwise.
+        let total = read_u32(list, 0) as usize;
         let n = read_u32(list, 4) as usize;
         for i in 0..n {
-            let e = list.add(8 + i * BSS_SIZE);
+            let start = 8 + i * BSS_SIZE;
+            if start + BSS_SIZE > total {
+                crate::log_warn!("Wi-Fi list shorter than its count ({total} bytes, {n} entries)");
+                break;
+            }
+            let e = list.add(start);
             let len = (read_u32(e, 0) as usize).min(32);
             let ssid = String::from_utf8_lossy(std::slice::from_raw_parts(e.add(4), len)).into_owned();
             let mac = std::slice::from_raw_parts(e.add(40), 6);
@@ -276,7 +286,8 @@ fn read_bss(w: &Wlan, guid: &[u8; 16]) -> Vec<AccessPoint> {
             let cap = ptr::read_unaligned(e.add(88) as *const u16);
             let off = read_u32(e, 352) as usize;
             let size = (read_u32(e, 356) as usize).min(8192);
-            let (security, wps) = parse_ies(std::slice::from_raw_parts(e.add(off), size), cap);
+            let ies = if start + off + size <= total { std::slice::from_raw_parts(e.add(off), size) } else { &[][..] };
+            let (security, wps) = parse_ies(ies, cap);
             out.push(AccessPoint { ssid, bssid, rssi, security, wps });
         }
         WlanFreeMemory(list as *const c_void);
@@ -322,12 +333,12 @@ pub fn survey(fresh: bool) -> Survey {
         unsafe {
             if *connected {
                 let (mut size, mut data, mut vt) = (0u32, ptr::null_mut::<u8>(), 0u32);
-                if WlanQueryInterface(w.0, guid.as_ptr(), 7, ptr::null(), &mut size, &mut data, &mut vt) == 0 && !data.is_null() && size >= 562 {
+                if WlanQueryInterface(w.0, guid.as_ptr(), 7, ptr::null(), &mut size, &mut data, &mut vt) == 0 && !data.is_null() && size >= 580 {
                     let len = (read_u32(data, 520) as usize).min(32);
                     let ssid = String::from_utf8_lossy(std::slice::from_raw_parts(data.add(524), len)).into_owned();
                     let b = std::slice::from_raw_parts(data.add(560), 6);
                     let bssid = b.iter().map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(":");
-                    out.connected = Some(Connection { ssid, bssid });
+                    out.connected = Some(Connection { ssid, bssid, quality: read_u32(data, 576).min(100) });
                     WlanFreeMemory(data as *const c_void);
                 }
             }
@@ -351,9 +362,104 @@ pub fn survey(fresh: bool) -> Survey {
     out
 }
 
+// ---------- live connection events, for spotting "kick-off" (deauthentication) attacks ----------
+
+/// WLAN_NOTIFICATION_DATA (x64).
+#[repr(C)]
+pub struct Note {
+    source: u32,
+    code: u32,
+    guid: [u8; 16],
+    size: u32,
+    data: *const u8,
+}
+
+const SOURCE_ACM: u32 = 0x8;
+const ACM_CONNECTION_COMPLETE: u32 = 10;
+const ACM_DISCONNECTED: u32 = 21;
+
+/// What the Wi-Fi adapter just did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Link {
+    Connected(String),
+    Disconnected { ssid: String, reason: u32 },
+}
+
+static LINKS: std::sync::OnceLock<std::sync::Mutex<std::sync::mpsc::Sender<Link>>> = std::sync::OnceLock::new();
+
+/// Reads a WLAN_CONNECTION_NOTIFICATION_DATA: mode @0, profile name @4, SSID length @516 and bytes @520,
+/// reason code @560.
+fn link_event(code: u32, data: &[u8]) -> Option<Link> {
+    if data.len() < 564 {
+        return None;
+    }
+    let u32_at = |o: usize| u32::from_le_bytes([data[o], data[o + 1], data[o + 2], data[o + 3]]);
+    let len = (u32_at(516) as usize).min(32);
+    let ssid = String::from_utf8_lossy(&data[520..520 + len]).into_owned();
+    match code {
+        ACM_CONNECTION_COMPLETE => Some(Link::Connected(ssid)),
+        ACM_DISCONNECTED => Some(Link::Disconnected { ssid, reason: u32_at(560) }),
+        _ => None,
+    }
+}
+
+unsafe extern "system" fn on_note(note: *const Note, _context: *mut c_void) {
+    // SAFETY: Windows passes a valid notification for the duration of the call, and `data` holds `size` bytes.
+    let Some(n) = (unsafe { note.as_ref() }) else { return };
+    if n.source != SOURCE_ACM || n.data.is_null() {
+        return;
+    }
+    let data = unsafe { std::slice::from_raw_parts(n.data, n.size as usize) };
+    if let (Some(ev), Some(tx)) = (link_event(n.code, data), LINKS.get()) {
+        if let Ok(tx) = tx.lock() {
+            let _ = tx.send(ev);
+        }
+    }
+}
+
+/// Keeps a Wi-Fi handle open so connection events keep arriving; they stop when this is dropped.
+pub struct LinkWatch {
+    _handle: Wlan,
+}
+
+/// Starts sending connection events to `tx`. One watcher per app.
+pub fn watch_links(tx: std::sync::mpsc::Sender<Link>) -> Option<LinkWatch> {
+    LINKS.set(std::sync::Mutex::new(tx)).ok()?;
+    let w = Wlan::open()?;
+    let mut previous = 0u32;
+    // SAFETY: the callback only reads the data Windows passes it, and the handle stays open as long as the
+    // returned LinkWatch lives.
+    let rc = unsafe { WlanRegisterNotification(w.0, SOURCE_ACM, 1, Some(on_note), ptr::null(), ptr::null(), &mut previous) };
+    if rc != 0 {
+        crate::log_warn!("Wi-Fi events unavailable (WlanRegisterNotification returned {rc})");
+        return None;
+    }
+    Some(LinkWatch { _handle: w })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn note(ssid: &str, reason: u32) -> Vec<u8> {
+        let mut d = vec![0u8; 568];
+        d[516..520].copy_from_slice(&(ssid.len() as u32).to_le_bytes());
+        d[520..520 + ssid.len()].copy_from_slice(ssid.as_bytes());
+        d[560..564].copy_from_slice(&reason.to_le_bytes());
+        d
+    }
+
+    #[test]
+    fn connection_events_carry_the_network_name() {
+        assert_eq!(link_event(10, &note("Home", 0)), Some(Link::Connected("Home".into())));
+        assert_eq!(link_event(21, &note("Home", 0x8_0008)), Some(Link::Disconnected { ssid: "Home".into(), reason: 0x8_0008 }));
+    }
+
+    #[test]
+    fn other_events_and_short_buffers_are_ignored() {
+        assert_eq!(link_event(7, &note("Home", 0)), None);
+        assert_eq!(link_event(21, &[0u8; 100]), None);
+    }
 
     fn rsn(pmf: u16) -> Vec<u8> {
         let mut b = vec![48, 20, 1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 2];

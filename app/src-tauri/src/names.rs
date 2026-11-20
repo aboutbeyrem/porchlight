@@ -94,18 +94,175 @@ pub fn ptr_answer(buf: &[u8]) -> Option<String> {
     None
 }
 
+fn reverse_name(ip: Ipv4Addr) -> String {
+    let o = ip.octets();
+    format!("{}.{}.{}.{}.in-addr.arpa", o[3], o[2], o[1], o[0])
+}
+
+/// Host names that say nothing: made from the address, a random ID, or a placeholder.
+pub fn generic_host(label: &str) -> bool {
+    let l = label.to_ascii_lowercase();
+    let digit_groups = l.split(|c: char| !c.is_ascii_digit()).filter(|g| !g.is_empty()).count();
+    let numeric = l.chars().filter(|c| c.is_ascii_digit() || matches!(c, '-' | '.' | '_')).count() * 10 >= l.len() * 8;
+    let hexish = l.len() >= 16 && l.chars().filter(|c| c.is_ascii_hexdigit() || *c == '-').count() * 10 >= l.len() * 9;
+    l.len() < 2
+        || (digit_groups >= 3 && numeric)
+        || hexish
+        || ["localhost", "unknown", "espressif", "android", "host", "dhcp", "ip-", "client", "device", "*"].iter().any(|g| l == *g || (l.starts_with(g) && l[g.len()..].starts_with(|c: char| c.is_ascii_digit() || c == '-')))
+}
+
+/// The first label of a host name, if it says something ("Galaxy-A54.home" → "Galaxy-A54").
+fn clean_host(host: &str) -> Option<String> {
+    let label = host.split('.').next().unwrap_or("").trim().to_string();
+    if label.to_ascii_lowercase().starts_with("android-") {
+        // Older Android phones name themselves "android-" plus a random ID: at least say what it is.
+        return Some("Android device".into());
+    }
+    (!generic_host(&label)).then_some(label)
+}
+
 /// Asks a device directly for its own name (Apple devices, Linux, Windows 10+ answer this).
 pub fn mdns_name(ip: Ipv4Addr) -> Option<String> {
     let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
     sock.set_read_timeout(Some(Duration::from_millis(900))).ok()?;
-    let o = ip.octets();
-    let name = format!("{}.{}.{}.{}.in-addr.arpa", o[3], o[2], o[1], o[0]);
-    sock.send_to(&encode_query(&name, 12), (ip, 5353)).ok()?;
+    sock.send_to(&encode_query(&reverse_name(ip), 12), (ip, 5353)).ok()?;
     let mut buf = [0u8; 1500];
     let (n, _) = sock.recv_from(&mut buf).ok()?;
-    let host = ptr_answer(&buf[..n])?;
-    let host = host.trim_end_matches(".local").trim_end_matches('.').to_string();
-    (!host.is_empty()).then_some(host)
+    clean_host(&ptr_answer(&buf[..n])?)
+}
+
+/// The name a device gave the router when it joined (DHCP), from the router's own DNS. Most home routers answer
+/// this for every device they handed an address to, including phones that announce nothing else.
+pub fn router_name(ip: Ipv4Addr, router: Ipv4Addr) -> Option<String> {
+    let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
+    sock.set_read_timeout(Some(Duration::from_millis(900))).ok()?;
+    let mut q = encode_query(&reverse_name(ip), 12);
+    q[2] = 0x01; // "recursion desired", like any ordinary lookup
+    sock.send_to(&q, (router, 53)).ok()?;
+    let mut buf = [0u8; 1500];
+    let (n, from) = sock.recv_from(&mut buf).ok()?;
+    if from.ip() != std::net::IpAddr::V4(router) || n < 4 || buf[3] & 0x0f != 0 {
+        return None;
+    }
+    clean_host(&ptr_answer(&buf[..n])?)
+}
+
+// ---------- DNS-SD: the names devices advertise for their services ("Sara's iPhone", "Living Room TV") ----------
+
+/// Services whose advertised names are the names people gave their devices, best first.
+const SERVICES: [&str; 11] = [
+    "_googlecast._tcp.local",
+    "_companion-link._tcp.local",
+    "_airplay._tcp.local",
+    "_raop._tcp.local",
+    "_spotify-connect._tcp.local",
+    "_amzn-wplay._tcp.local",
+    "_ipp._tcp.local",
+    "_printer._tcp.local",
+    "_hap._tcp.local",
+    "_smb._tcp.local",
+    "_workstation._tcp.local",
+];
+
+/// One question per service, in a single mDNS message.
+fn service_query() -> Vec<u8> {
+    let mut b = vec![0x50, 0x4d, 0, 0, 0, SERVICES.len() as u8, 0, 0, 0, 0, 0, 0];
+    for s in SERVICES {
+        for label in s.split('.') {
+            b.push(label.len() as u8);
+            b.extend_from_slice(label.as_bytes());
+        }
+        b.extend_from_slice(&[0, 0, 12, 0, 1]);
+    }
+    b
+}
+
+/// Every resource record in a DNS message: (owner name, type, data start, data length).
+fn records(buf: &[u8]) -> Vec<(String, u16, usize, usize)> {
+    let mut out = Vec::new();
+    if buf.len() < 12 {
+        return out;
+    }
+    let count = |i: usize| usize::from(u16::from_be_bytes([buf[i], buf[i + 1]]));
+    let mut off = 12;
+    for _ in 0..count(4) {
+        off = read_name(buf, off).1 + 4;
+    }
+    for _ in 0..(count(6) + count(8) + count(10)).min(64) {
+        let (owner, after) = read_name(buf, off);
+        let (Some(t), Some(l)) = (buf.get(after..after + 2), buf.get(after + 8..after + 10)) else { break };
+        let (rtype, len) = (u16::from_be_bytes([t[0], t[1]]), usize::from(u16::from_be_bytes([l[0], l[1]])));
+        if after + 10 + len > buf.len() {
+            break;
+        }
+        out.push((owner, rtype, after + 10, len));
+        off = after + 10 + len;
+    }
+    out
+}
+
+/// "key=value" strings from a TXT record.
+fn txt(buf: &[u8], start: usize, len: usize) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut i = start;
+    while i < start + len {
+        let n = usize::from(buf[i]);
+        let Some(s) = buf.get(i + 1..i + 1 + n) else { break };
+        let s = String::from_utf8_lossy(s);
+        if let Some((k, v)) = s.split_once('=') {
+            out.push((k.to_ascii_lowercase(), v.to_string()));
+        }
+        i += 1 + n;
+    }
+    out
+}
+
+/// "A1B2C3D4E5F6@Kitchen" → "Kitchen"; "HP LaserJet [A1B2C3]" → "HP LaserJet".
+fn clean_instance(name: &str) -> Option<String> {
+    let mut n = name.trim();
+    if let Some((pre, rest)) = n.split_once('@') {
+        if pre.chars().all(|c| c.is_ascii_hexdigit()) {
+            n = rest;
+        }
+    }
+    let n = match n.rfind(" [") {
+        Some(i) if n.ends_with(']') => &n[..i],
+        _ => n,
+    };
+    let n = n.trim();
+    (!n.is_empty() && !generic_host(n)).then(|| n.chars().take(48).collect())
+}
+
+/// The friendliest advertised name in an mDNS reply, following the order of SERVICES.
+pub fn best_service_name(buf: &[u8]) -> Option<String> {
+    let recs = records(buf);
+    let mut found: Vec<(usize, String)> = Vec::new();
+    for (owner, rtype, start, _) in &recs {
+        let Some(rank) = SERVICES.iter().position(|s| owner.eq_ignore_ascii_case(s)) else { continue };
+        if *rtype != 12 {
+            continue;
+        }
+        let instance_full = read_name(buf, *start).0;
+        let suffix = format!(".{}", SERVICES[rank]);
+        let instance = instance_full.strip_suffix(suffix.as_str()).unwrap_or(&instance_full).to_string();
+        // Chromecasts and Google speakers put the name people gave them in the "fn" field.
+        let friendly = recs.iter().filter(|(o, t, _, _)| *t == 16 && o.eq_ignore_ascii_case(&instance_full)).flat_map(|(_, _, s, l)| txt(buf, *s, *l)).find(|(k, _)| k == "fn").map(|(_, v)| v);
+        if let Some(name) = friendly.as_deref().and_then(clean_instance).or_else(|| clean_instance(&instance)) {
+            found.push((rank, name));
+        }
+    }
+    found.sort_by_key(|(rank, _)| *rank);
+    found.into_iter().next().map(|(_, n)| n)
+}
+
+/// Asks a device which of the common services it offers, and under which name.
+pub fn service_name(ip: Ipv4Addr) -> Option<String> {
+    let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
+    sock.set_read_timeout(Some(Duration::from_millis(900))).ok()?;
+    sock.send_to(&service_query(), (ip, 5353)).ok()?;
+    let mut buf = [0u8; 9000];
+    let (n, _) = sock.recv_from(&mut buf).ok()?;
+    best_service_name(&buf[..n])
 }
 
 // ---------- NetBIOS: the name a Windows PC or storage drive gives itself ----------
@@ -313,6 +470,88 @@ mod tests {
         b.extend_from_slice(&[0, target.len() as u8]);
         b.extend_from_slice(&target);
         assert_eq!(ptr_answer(&b), Some("sara-iphone.local".into()));
+    }
+
+    #[test]
+    fn host_names_made_from_addresses_or_ids_are_ignored() {
+        for g in ["192-168-1-5", "dhcp-12", "host-5", "unknown", "a3f1c2d4e5b6a7c8d9e0", "localhost"] {
+            assert!(generic_host(g), "{g} should be generic");
+        }
+        for real in ["Galaxy-A54", "DESKTOP-7QK2M1", "Saras-iPhone", "LivingRoomTV"] {
+            assert!(!generic_host(real), "{real} is a real name");
+        }
+    }
+
+    #[test]
+    fn router_host_names_lose_their_domain() {
+        assert_eq!(clean_host("Galaxy-A54.home"), Some("Galaxy-A54".into()));
+        assert_eq!(clean_host("192-168-1-5.lan"), None);
+        assert_eq!(clean_host("android-3f9c2a1b4e5d6f70.home"), Some("Android device".into()));
+    }
+
+    #[test]
+    fn instance_names_lose_ids() {
+        assert_eq!(clean_instance("A1B2C3D4E5F6@Kitchen"), Some("Kitchen".into()));
+        assert_eq!(clean_instance("HP LaserJet Pro M404 [A1B2C3]"), Some("HP LaserJet Pro M404".into()));
+        assert_eq!(clean_instance("Sara's iPhone"), Some("Sara's iPhone".into()));
+    }
+
+    fn name(b: &mut Vec<u8>, n: &str) {
+        for l in n.split('.') {
+            b.push(l.len() as u8);
+            b.extend_from_slice(l.as_bytes());
+        }
+        b.push(0);
+    }
+
+    fn record(b: &mut Vec<u8>, owner: &str, rtype: u16, data: &[u8]) {
+        name(b, owner);
+        b.extend_from_slice(&rtype.to_be_bytes());
+        b.extend_from_slice(&[0, 1, 0, 0, 0, 120]);
+        b.extend_from_slice(&(data.len() as u16).to_be_bytes());
+        b.extend_from_slice(data);
+    }
+
+    #[test]
+    fn a_chromecast_is_called_by_the_name_people_gave_it() {
+        let mut b = vec![0, 0, 0x84, 0, 0, 0, 0, 2, 0, 0, 0, 1];
+        let mut target = Vec::new();
+        name(&mut target, "Chromecast-1f2e3d4c._googlecast._tcp.local");
+        record(&mut b, "_googlecast._tcp.local", 12, &target);
+        let mut target2 = Vec::new();
+        name(&mut target2, "Sara's MacBook._companion-link._tcp.local");
+        record(&mut b, "_companion-link._tcp.local", 12, &target2);
+        let txt = [b"\x0fid=1f2e3d4c5b6a".as_slice(), b"\x11fn=Living Room TV".as_slice()].concat();
+        record(&mut b, "Chromecast-1f2e3d4c._googlecast._tcp.local", 16, &txt);
+        assert_eq!(best_service_name(&b), Some("Living Room TV".into()));
+    }
+
+    #[test]
+    fn an_iphone_is_called_by_its_own_name() {
+        let mut b = vec![0, 0, 0x84, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+        let mut target = Vec::new();
+        name(&mut target, "Sara's iPhone._companion-link._tcp.local");
+        record(&mut b, "_companion-link._tcp.local", 12, &target);
+        assert_eq!(best_service_name(&b), Some("Sara's iPhone".into()));
+    }
+}
+
+#[cfg(test)]
+mod live_names {
+    /// How many devices on this network each naming source can name: cargo test live_names -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn live_names() {
+        let netw = crate::net::find_network().expect("connected");
+        let found = crate::net::sweep(&crate::net::hosts(&netw));
+        let mut named = 0;
+        for (ip, _) in &found {
+            let (s, m, n, r, w) = (super::service_name(*ip), super::mdns_name(*ip), super::netbios_name(*ip), super::router_name(*ip, netw.gateway), super::web_title(*ip));
+            let any = s.is_some() || m.is_some() || n.is_some() || r.is_some() || w.is_some();
+            named += usize::from(any);
+            println!(".{}: service={s:?} mdns={m:?} netbios={n:?} router={r:?} web={w:?}", ip.octets()[3]);
+        }
+        println!("{named} of {} devices named", found.len());
     }
 }
 

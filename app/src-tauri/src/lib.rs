@@ -3,8 +3,11 @@
 
 mod checks;
 mod guard;
+#[macro_use]
+mod log;
 mod names;
 mod net;
+mod system;
 mod wifi;
 
 use guard::State;
@@ -18,13 +21,21 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_updater::UpdaterExt;
+
+const SITE: &str = "https://porchlight-beryl.vercel.app";
+const ISSUES: &str = "https://github.com/aboutbeyrem/porchlight/issues/new/choose";
 
 struct Shared {
     state: Mutex<State>,
     path: PathBuf,
     trigger: Mutex<Sender<bool>>,
     busy: AtomicBool,
+    /// True while live Wi-Fi events arrive (the kick-off watch).
+    listening: AtomicBool,
     progress: Mutex<String>,
+    /// A newer version, once an update check has found one.
+    update: Mutex<Option<String>>,
 }
 
 fn show_main(app: &AppHandle) {
@@ -40,9 +51,108 @@ fn snapshot(app: &AppHandle) -> serde_json::Value {
     let state = shared.state.lock().map(|s| s.clone()).unwrap_or_default();
     let mut v = serde_json::to_value(&state).unwrap_or_default();
     v["busy"] = serde_json::Value::Bool(shared.busy.load(Ordering::SeqCst));
+    v["listening"] = serde_json::Value::Bool(shared.listening.load(Ordering::SeqCst));
     v["progress"] = serde_json::Value::String(shared.progress.lock().map(|p| p.clone()).unwrap_or_default());
     v["autostart"] = serde_json::Value::Bool(app.autolaunch().is_enabled().unwrap_or(false));
+    v["appVersion"] = serde_json::Value::String(env!("CARGO_PKG_VERSION").into());
+    v["update"] = shared.update.lock().ok().and_then(|u| u.clone()).map(serde_json::Value::String).unwrap_or_default();
     v
+}
+
+// ---------- updates: signed, checked once a day, installed only when you say so ----------
+
+/// Asks the update server whether a newer, signed version exists. The installer that comes back is only used if
+/// its signature matches the public key built into this app.
+async fn find_update(app: &AppHandle) -> Option<String> {
+    let updater = app.updater().map_err(|e| log_warn!("updater unavailable: {e}")).ok()?;
+    match updater.check().await {
+        Ok(Some(u)) => {
+            log_info!("update available: {}", u.version);
+            Some(u.version)
+        }
+        Ok(None) => {
+            log_info!("no update: {} is the latest", env!("CARGO_PKG_VERSION"));
+            None
+        }
+        Err(e) => {
+            log_warn!("update check failed: {e}");
+            None
+        }
+    }
+}
+
+fn watch_updates(app: AppHandle) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(90));
+        let mut told: Option<String> = None;
+        loop {
+            let found = tauri::async_runtime::block_on(find_update(&app));
+            if let Ok(mut u) = app.state::<Shared>().update.lock() {
+                u.clone_from(&found);
+            }
+            if let Some(v) = found.filter(|v| told.as_ref() != Some(v)) {
+                let _ = app.notification().builder().title(format!("Porchlight {v} is ready")).body("Open Porchlight and choose Install update. It takes a few seconds.").show();
+                told = Some(v);
+            }
+            publish(&app);
+            std::thread::sleep(Duration::from_secs(24 * 3600));
+        }
+    });
+}
+
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Option<String> {
+    let found = find_update(&app).await;
+    if let Ok(mut u) = app.state::<Shared>().update.lock() {
+        u.clone_from(&found);
+    }
+    publish(&app);
+    found
+}
+
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
+        return Err("Porchlight is already up to date.".into());
+    };
+    log_info!("installing {}", update.version);
+    update.download_and_install(|_, _| {}, || {}).await.map_err(|e| {
+        log_warn!("update failed: {e}");
+        format!("The update couldn't be installed: {e}")
+    })?;
+    app.restart()
+}
+
+// ---------- help: privacy notes, reporting a problem, a diagnostic file for beta testers ----------
+
+fn open_url(url: &str) {
+    // Only ever called with the fixed addresses above.
+    let _ = std::process::Command::new("explorer").arg(url).spawn();
+}
+
+#[tauri::command]
+fn open_link(which: String) {
+    match which.as_str() {
+        "privacy" => open_url(&format!("{SITE}/privacy/")),
+        "issues" => open_url(ISSUES),
+        "site" => open_url(SITE),
+        _ => {}
+    }
+}
+
+/// Writes an anonymised summary (no names, addresses or network names) to Downloads and shows it in Explorer.
+#[tauri::command]
+fn export_diagnostics(app: AppHandle) -> Result<String, String> {
+    let state = app.state::<Shared>().state.lock().map(|s| s.clone()).map_err(|e| e.to_string())?;
+    let windows = net::run("cmd", &["/c", "ver"]).trim().to_string();
+    let listening = app.state::<Shared>().listening.load(Ordering::SeqCst);
+    let text = guard::diagnostics(&state, env!("CARGO_PKG_VERSION"), &windows, listening, &log::tail(200));
+    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    let file = dir.join(format!("porchlight-diagnostics-{}.txt", log::timestamp(guard::now()).replace(':', "-")));
+    std::fs::write(&file, text).map_err(|e| e.to_string())?;
+    let _ = std::process::Command::new("explorer").arg(format!("/select,{}", file.display())).spawn();
+    Ok(file.display().to_string())
 }
 
 fn publish(app: &AppHandle) {
@@ -62,23 +172,10 @@ fn run_check(app: &AppHandle, full: bool) {
         }
         publish(app);
     };
+    let began = guard::now();
     let alerts = guard::check(&mut work, full, &progress);
-    // Keep anything the user changed while the check ran (names, settings, read alerts).
     if let Ok(mut live) = shared.state.lock() {
-        work.settings = live.settings.clone();
-        for (k, d) in work.devices.iter_mut() {
-            if let Some(l) = live.devices.get(k) {
-                d.custom_name = l.custom_name.clone();
-                if d.custom_name.is_some() {
-                    d.name = d.custom_name.clone().unwrap_or_default();
-                }
-            }
-        }
-        // Devices the user removed while the check ran stay removed (unless the check just found them again).
-        let removed: Vec<String> = work.devices.keys().filter(|k| !live.devices.contains_key(*k) && work.devices[*k].last_seen < work.last_check).cloned().collect();
-        for k in removed {
-            work.devices.remove(&k);
-        }
+        guard::keep_user_changes(&mut work, &live, began);
         *live = work;
         live.save(&shared.path);
     }
@@ -86,20 +183,73 @@ fn run_check(app: &AppHandle, full: bool) {
         g.clear();
     }
     shared.busy.store(false, Ordering::SeqCst);
-    let notify = shared.state.lock().map(|s| s.settings.notify).unwrap_or(true);
-    if notify {
-        for a in alerts.iter().take(4) {
-            let _ = app.notification().builder().title(&a.title).body(&a.body).show();
-        }
-        if alerts.len() > 4 {
-            let _ = app.notification().builder().title("Porchlight").body(format!("{} more things to look at. Open Porchlight to see them.", alerts.len() - 4)).show();
-        }
-    }
+    notify(app, &alerts);
     if let Some(tray) = app.tray_by_id("main") {
         let status = shared.state.lock().map(|s| s.status.clone()).unwrap_or_default();
         let _ = tray.set_tooltip(Some(format!("Porchlight: {status}")));
     }
     publish(app);
+}
+
+/// Shows up to four notifications, then one that sums up the rest.
+fn notify(app: &AppHandle, alerts: &[guard::Alert]) {
+    let on = app.state::<Shared>().state.lock().map(|s| s.settings.notify).unwrap_or(true);
+    if !on || alerts.is_empty() {
+        return;
+    }
+    for a in alerts.iter().take(4) {
+        if let Err(e) = app.notification().builder().title(&a.title).body(&a.body).show() {
+            log_warn!("notification failed: {e}");
+        }
+    }
+    if alerts.len() > 4 {
+        let _ = app.notification().builder().title("Porchlight").body(format!("{} more things to look at. Open Porchlight to see them.", alerts.len() - 4)).show();
+    }
+}
+
+/// Repeated drops and reconnects with a good signal: warn, then look for a fake copy of the network.
+fn kicked(app: &AppHandle, ssid: &str, bounces: usize) {
+    let shared = app.state::<Shared>();
+    let quality = wifi::survey(false).connected.map(|c| c.quality).unwrap_or(0);
+    let alert = shared.state.lock().ok().and_then(|mut s| {
+        if !s.settings.consented || s.settings.paused {
+            return None;
+        }
+        let a = guard::kicked_off(&mut s, ssid, bounces, quality);
+        s.save(&shared.path);
+        a
+    });
+    if let Some(a) = alert {
+        notify(app, &[a]);
+        publish(app);
+        trigger(app, false);
+    }
+}
+
+/// Live Wi-Fi events, for spotting kick-off attacks as they happen rather than at the next check.
+fn watch_wifi_events(app: AppHandle) {
+    std::thread::spawn(move || {
+        let (tx, rx) = channel::<wifi::Link>();
+        let Some(_watch) = wifi::watch_links(tx) else { return };
+        log_info!("listening for Wi-Fi connection events");
+        app.state::<Shared>().listening.store(true, Ordering::SeqCst);
+        publish(&app);
+        let mut kick = guard::KickWatch::default();
+        for event in rx {
+            let t = guard::now();
+            match event {
+                wifi::Link::Disconnected { ssid, reason } => {
+                    log_info!("Wi-Fi dropped (reason {reason:#x})");
+                    kick.disconnected(&ssid, t);
+                }
+                wifi::Link::Connected(ssid) => {
+                    if let Some(n) = kick.connected(&ssid, t) {
+                        kicked(&app, &ssid, n);
+                    }
+                }
+            }
+        }
+    });
 }
 
 fn trigger(app: &AppHandle, full: bool) {
@@ -230,13 +380,16 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
+            log::init(dir.clone());
+            log_info!("Porchlight {} starting{}", env!("CARGO_PKG_VERSION"), if std::env::args().any(|a| a == "--minimized") { " in the background" } else { "" });
             let path = dir.join("porchlight-state.json");
             let state = State::load(&path);
             let (tx, rx) = channel::<bool>();
-            app.manage(Shared { state: Mutex::new(state), path, trigger: Mutex::new(tx), busy: AtomicBool::new(false), progress: Mutex::new(String::new()) });
+            app.manage(Shared { state: Mutex::new(state), path, trigger: Mutex::new(tx), busy: AtomicBool::new(false), listening: AtomicBool::new(false), progress: Mutex::new(String::new()), update: Mutex::new(None) });
 
             // Tray: Porchlight keeps watching when the window is closed.
             let open = MenuItem::with_id(app, "open", "Open Porchlight", true, None::<&str>)?;
@@ -282,6 +435,9 @@ pub fn run() {
                 }
             });
 
+            watch_wifi_events(app.handle().clone());
+            watch_updates(app.handle().clone());
+
             if !std::env::args().any(|a| a == "--minimized") {
                 show_main(app.handle());
             }
@@ -293,7 +449,7 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .invoke_handler(tauri::generate_handler![get_state, visible_networks, start_watching, check_now, rename_device, forget_device, accept_router, set_home_here, set_settings, mark_read, forget_everything])
+        .invoke_handler(tauri::generate_handler![get_state, visible_networks, start_watching, check_now, rename_device, forget_device, accept_router, set_home_here, set_settings, mark_read, forget_everything, check_update, install_update, open_link, export_diagnostics])
         .run(tauri::generate_context!())
         .expect("error while running Porchlight");
 }

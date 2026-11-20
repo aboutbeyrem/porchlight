@@ -1,4 +1,4 @@
-# Porchlight
+﻿# Porchlight
 
 **A security checkup for home and office networks, written so anyone can act on it.**
 It finds the devices on your network, looks for the problems that actually get homes and small offices into trouble,
@@ -6,9 +6,10 @@ and explains each one in plain words: what we found, what it means, how likely i
 For IT staff, every finding also has a stable ID, a severity, the observed technical details, and the related CIS
 Controls v8 safeguards.
 
-It looks; it never breaks in. Windows and Linux, no dependencies, nothing leaves your computer.
+It looks; it never breaks in. Windows and Linux, no dependencies, no account, and nothing about you leaves your computer
+([privacy notes](https://porchlight-beryl.vercel.app/privacy/)).
 
-**Website:** [porchlight-beryl.vercel.app](https://porchlight-beryl.vercel.app) · **Live demo** (a made-up home, nothing is scanned): [porchlight-beryl.vercel.app/demo](https://porchlight-beryl.vercel.app/demo/)
+**Website:** [porchlight-beryl.vercel.app](https://porchlight-beryl.vercel.app) Â· **Live demo** (a made-up home, nothing is scanned): [porchlight-beryl.vercel.app/demo](https://porchlight-beryl.vercel.app/demo/)
 
 ![A sample Porchlight report of a made-up home: a score of 60 out of 100, a note that one new device joined and one thing was fixed since last week, and a map of the network with each device coloured by what was found on it](docs/panel-sample.png)
 
@@ -18,25 +19,48 @@ It looks; it never breaks in. Windows and Linux, no dependencies, nothing leaves
 
 ![The Porchlight app: a safety score, four things worth fixing, and a map of a home network with the router in the middle](docs/app-overview.png)
 
-**[Download Porchlight 0.5.0 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.5.0_x64-setup.exe)** (2 MB, Windows 10 and 11, installs per user without admin rights).
+**[Download Porchlight 0.6.0 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.0_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights).
 
 A tray app written in Rust ([Tauri](https://tauri.app)) that keeps watching your home network in the background and
 sends a notification when something changes:
 
-- **A new device joins your network**, named from what it announces (mDNS, NetBIOS, its web page, UPnP) and its
-  maker (the IEEE registry is built in), with any risky open doors found on it right away. You can rename anything.
+- **A new device joins your network**, with any risky open doors found on it right away. Devices are named from
+  everything they announce: the name they gave your router when they joined (read from the router's own DNS), the
+  names they advertise for their services ("Living Room TV", "Sara's iPhone"), mDNS, NetBIOS, UPnP and their own web
+  page, plus their maker from the built-in IEEE registry. Devices that announce nothing are asked again every hour,
+  get a clear label ("Phone, tablet or laptop (.39)"), and a one-click name that Porchlight remembers.
 - **Something pretends to be your router**: another device answering with the router's hardware address, or the
   router's identity changing (how ARP-spoofing "man-in-the-middle" attacks start).
+- **Someone keeps kicking this computer off the Wi-Fi**: Porchlight listens to live Wi-Fi connection events and warns
+  when the computer drops off and reconnects again and again with a good signal, the pattern of a deauthentication
+  ("kick-off") attack, then looks for a fake copy of your network straight away.
 - **A fake copy of your Wi-Fi appears** with weaker protection (an "evil twin").
-- **Wi-Fi shield:** protection type, WPS, kick-off protection (802.11w management frame protection, which stops
-  deauthentication attacks), and the open networks this computer would join by itself, which is what MANA and KARMA
-  fake-hotspot attacks rely on. Read straight from the Windows Wi-Fi API, no monitor mode or admin rights needed.
+- **Your DNS is tampered with**: the DNS servers change, another device on the network answers lookups in the
+  router's place, or the DNS invents answers for websites that don't exist.
+- **Wi-Fi shield:** protection type, WPS, kick-off protection (802.11w management frame protection), and the open
+  networks this computer would join by itself, which is what MANA and KARMA fake-hotspot attacks rely on. Read straight
+  from the Windows Wi-Fi API, no monitor mode or admin rights needed.
+- **IPv6:** whether devices have public IPv6 addresses (so the router's IPv6 firewall matters), and whether more than
+  one device announces itself as the IPv6 router.
 - A daily full checkup of every device: Telnet, FTP, SMBv1, Remote Desktop without NLA, open camera streams, Android
   debugging, Docker, VNC, and ports opened to the internet through UPnP.
 
-Everything stays in one file on your computer (`%APPDATA%com.aboutbeyrem.porchlight`); Settings → Forget everything
-deletes it. The installer isn't code-signed yet, so Windows SmartScreen may warn the first time (More info → Run
-anyway). Build it yourself from `app/`: install Rust, then `npx @tauri-apps/cli build`.
+The map stays readable up to about 75 devices (rings around the router, the ones that need attention closest) and
+works with the keyboard. The window passes an automated accessibility audit (axe-core, every view, light and dark).
+
+**Updates are signed.** Porchlight checks once a day and only installs an update when you choose, and only if its
+signature matches the key built into the app ([how signing works](docs/SIGNING.md)). The installer itself isn't
+code-signed by Microsoft yet, so SmartScreen may warn the first time (More info â†’ Run anyway).
+
+**Privacy:** no account, no analytics, no telemetry. Everything stays in two files on your computer
+(`%APPDATA%\com.aboutbeyrem.porchlight`); Settings â†’ Forget everything deletes them. The only connections that
+leave your network are a daily update check and one DNS test lookup for a made-up name, listed in the
+[privacy notes](https://porchlight-beryl.vercel.app/privacy/).
+
+**Testing it?** See [docs/BETA.md](docs/BETA.md). Settings â†’ Help â†’ Save diagnostic file writes an anonymised summary
+(counts and check IDs, never names or addresses) to attach to an issue.
+
+Build it yourself from `app/`: install Rust, then `npx @tauri-apps/cli build`.
 
 The command-line checkup below (Node.js) is the office edition: it adds the office profile, policy files, CIS
 mapping and HTML/CSV reports, and runs on Linux too.
@@ -199,8 +223,14 @@ rights needed.
   hardware address can't be told apart this way.
 - Device makers are only named when a vendor list (from Wireshark, Nmap or the ieee-data package) is on the computer.
   Porchlight never downloads one.
-- **Not built yet:** spotting deauthentication attacks with a monitor-mode adapter. Today Porchlight reports whether
-  you have a monitor-mode adapter and whether it's on.
+- **Kick-off detection** (Windows app) sees this computer's own Wi-Fi connection, not the air around it: it notices
+  an attack aimed at this computer, not one aimed only at another device. A very unstable signal can look similar,
+  so it stays quiet when the signal is weak.
+- **Device names can't be guaranteed.** Porchlight uses every name a device announces anywhere; a phone that hides
+  its name and uses a private address announces nothing at all. Those devices get a descriptive label and a one-click
+  name, and are asked again every hour.
+- IPv6 checks are about this computer's view: they can't test from outside whether the router's IPv6 firewall
+  actually blocks incoming connections.
 
 ## Tested on a real home
 
@@ -230,13 +260,20 @@ Testing there also changed the design:
 npm test
 ```
 
-74 tests: parsers for every command's output (English and French Windows), mDNS and NetBIOS answers, the rules and
+The Node.js engine has 74 tests: parsers for every command's output (English and French Windows), mDNS and NetBIOS answers, the rules and
 tone of every finding (no scare words), fake copies of a network (including one that tries to vouch for itself through
 a neighbour's router), memory between checkups, fake SMB, Remote Desktop, Redis, camera and FTP servers on
 `127.0.0.1`, policy validation and accepted risks, private-range limits, report escaping (HTML and CSV formula
 injection), and the panel's security (DNS rebinding, cross-site requests, consent, path traversal).
 
 The sample report is built by the real rules from a made-up home: `node scripts/make-demo.js`.
+
+The Windows app has 74 Rust tests (`cargo test` in `app/src-tauri`): the decisions behind every alert (router
+impersonation, new devices, new risks, the first-look baseline, merging a finished check with what the user did
+meanwhile), the kick-off detector's timing rules, fake-copy clustering (second bands, extenders, invisible
+characters, a copy that tries to pass as the real network), Wi-Fi beacon parsing, DNS and mDNS message parsing,
+naming rules, and the diagnostic file never containing names or addresses. Live tests against a real network run
+with `cargo test -- --ignored`.
 
 ## How it was made
 

@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
+  <a class="skip" href="#main">Skip to content</a>
   <header class="titlebar" data-tauri-drag-region>
     <div class="tb-brand" data-tauri-drag-region><span class="tb-lamp" aria-hidden="true"></span>Porchlight</div>
     <div class="tb-status" id="tb-status" data-tauri-drag-region></div>
@@ -18,7 +19,7 @@
   </header>
 
   <!-- First launch -->
-  <section id="welcome" class="welcome" hidden>
+  <main id="welcome" class="welcome" hidden>
     <div class="welcome-art" aria-hidden="true">
       <div class="glow"></div>
       <svg class="welcome-lamp" viewBox="0 0 64 72"><path d="M18 6h28M32 6v8" /><path d="M21 14h22l5 24H16z" /><ellipse cx="32" cy="30" rx="8" ry="9" class="glass" /></svg>
@@ -41,12 +42,12 @@
       <label class="check"><input type="checkbox" id="w-ok"> <span>This is my network and I'm allowed to watch it.</span></label>
       <button id="w-start" class="btn primary large" disabled>Start watching</button>
     </div>
-  </section>
+  </main>
 
   <!-- The app -->
   <div id="app" class="app" hidden>
     <nav class="side" aria-label="Sections">
-      <button class="nav on" data-view="overview"><span class="ic" data-icon="shield"></span>Overview</button>
+      <button class="nav on" data-view="overview" aria-current="page"><span class="ic" data-icon="shield"></span>Overview</button>
       <button class="nav" data-view="devices"><span class="ic" data-icon="devices"></span>Devices<span class="count" id="n-devices"></span></button>
       <button class="nav" data-view="wifi"><span class="ic" data-icon="wifi"></span>Wi-Fi shield</button>
       <button class="nav" data-view="alerts"><span class="ic" data-icon="bell"></span>Alerts<span class="count accent" id="n-alerts"></span></button>
@@ -61,9 +62,10 @@
       </div>
     </nav>
 
-    <main class="main" id="main">
-      <div class="banner" id="away" hidden></div>
-      <div class="banner progress" id="busy" hidden><span class="spinner" aria-hidden="true"></span><span id="busy-text"></span></div>
+    <main class="main" id="main" tabindex="-1">
+      <div class="banner update" id="update-banner" role="status" hidden><span id="update-text"></span><button class="btn primary small" id="update-go">Install update</button></div>
+      <div class="banner" id="away" role="status" hidden></div>
+      <div class="banner progress" id="busy" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span id="busy-text"></span></div>
 
       <section class="view" id="v-overview">
         <div class="hero card">
@@ -76,7 +78,8 @@
               <div class="row"><button class="btn primary" id="full-check"><span class="ic" data-icon="scan"></span>Run full checkup</button><button class="btn ghost" id="see-devices">See devices</button></div>
             </div>
           </div>
-          <div class="map-wrap"><svg class="map" id="map" viewBox="0 0 440 300" role="img" aria-label="Map of your home network"></svg></div>
+          <div class="map-wrap"><svg class="map" id="map" viewBox="-220 -150 440 300" role="group" aria-label="Map of your home network"></svg>
+            <p class="map-legend" aria-hidden="true"><span><i class="sw soon"></i>Fix soon</span><span><i class="sw worth"></i>Worth fixing</span><span><i class="sw sub"></i>Through your extender</span></p></div>
         </div>
 
         <div class="tiles" id="tiles"></div>
@@ -85,6 +88,8 @@
           <div>
             <div class="sec-head"><h2>Needs your attention</h2><span class="muted small" id="att-count"></span></div>
             <div id="attention" class="stack"></div>
+            <div class="sec-head tips-head" id="tips-head" hidden><h2>Good to know</h2></div>
+            <div id="tips" class="stack"></div>
           </div>
           <div>
             <div class="sec-head"><h2>Recent activity</h2><button class="link" data-goto="alerts">See all</button></div>
@@ -96,13 +101,14 @@
       <section class="view" id="v-devices" hidden>
         <div class="view-head">
           <div><h1>Devices</h1><p class="lead">Everything on your home network. Give anything a name you'll recognise.</p></div>
-          <div class="seg" role="group" aria-label="Show"><button class="on" data-dev="online">Online now</button><button data-dev="all">Everything seen</button></div>
+          <div class="seg" role="group" aria-label="Show"><button class="on" data-dev="online" aria-pressed="true">Online now</button><button data-dev="all" aria-pressed="false">Everything seen</button></div>
         </div>
         <div id="device-list" class="device-grid"></div>
       </section>
 
       <section class="view" id="v-wifi" hidden>
         <div class="view-head"><div><h1>Wi-Fi shield</h1><p class="lead">How your Wi-Fi is protected, whether anything nearby copies it, and which networks this computer joins by itself.</p></div></div>
+        <h2 class="sr-only">Your Wi-Fi at a glance</h2>
         <div id="wifi-cards" class="wifi-grid"></div>
         <div class="sec-head"><h2>What Porchlight found</h2></div>
         <div id="wifi-findings" class="stack"></div>
@@ -129,10 +135,20 @@
           <div class="set"><span><b>Moved or changed network?</b><small>Make the network you're on now your home network.</small></span><button class="btn ghost" id="s-home">Watch this network</button></div>
         </div>
         <div class="settings-group">
+          <h2>Updates</h2>
+          <div class="set"><span><b id="u-title">Porchlight is up to date</b><small id="u-text">Porchlight checks once a day. Updates are signed, and only installed when you choose.</small></span><span class="row"><button class="btn ghost" id="u-check">Check for updates</button><button class="btn primary" id="u-install" hidden>Install update</button></span></div>
+        </div>
+        <div class="settings-group">
+          <h2>Help</h2>
+          <div class="set"><span><b>Something wrong or confusing?</b><small>Tell us on GitHub. Attach a diagnostic file: it has counts and check names, never device names, network names or addresses.</small></span><span class="row"><button class="btn ghost" id="h-diag">Save diagnostic file</button><button class="btn ghost" id="h-issue">Report a problem</button></span></div>
+          <p class="muted small" id="h-done" role="status"></p>
+        </div>
+        <div class="settings-group">
           <h2>Privacy</h2>
+          <div class="set"><span><b>What Porchlight sends, and to whom</b><small>Nothing about you or your devices. One daily update check, one DNS test lookup for a made-up name. Everything else stays on this computer.</small></span><button class="btn ghost" id="p-notes">Read the privacy notes</button></div>
           <div class="set danger"><span><b>Forget everything</b><small>Delete every device, name and alert, and stop starting with Windows.</small></span><button class="btn danger" id="s-forget">Forget everything</button></div>
         </div>
-        <div class="about"><span class="tb-lamp" aria-hidden="true"></span><div><b>Porchlight 0.5.0</b><p class="muted small">Free and open source (MIT). It looks; it never breaks in. Only watch networks you're allowed to watch.<br>porchlight-beryl.vercel.app · github.com/aboutbeyrem/porchlight</p></div></div>
+        <div class="about"><span class="tb-lamp" aria-hidden="true"></span><div><b id="about-version">Porchlight</b><p class="muted small">Free and open source (MIT). It looks; it never breaks in. Only watch networks you're allowed to watch.<br>porchlight-beryl.vercel.app · github.com/aboutbeyrem/porchlight</p></div></div>
       </section>
     </main>
   </div>

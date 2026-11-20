@@ -1,0 +1,39 @@
+name: Something went wrong
+description: A crash, an error, a screen that looks broken, or a check that never finishes.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Porchlight. Please don't paste Wi-Fi passwords, device names you'd rather keep private, or public IP addresses.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Porchlight version
+      description: Settings, at the bottom (for example 0.6.0).
+    validations:
+      required: true
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows
+      options: [Windows 11, Windows 10, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostic file
+      description: Settings → Help → Save diagnostic file, then drag the file here. It has counts and check names only, never device names, network names or addresses.
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (optional)
+      description: Cover anything private before attaching.

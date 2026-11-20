@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Porchlight",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "identifier": "com.aboutbeyrem.porchlight",
   "build": {
     "frontendDist": "../ui"
@@ -47,6 +47,18 @@
       "nsis": {
         "installMode": "currentUser",
         "displayLanguageSelector": false
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVDMzdEMUY3RjU0QkE1MkMKUldRc3BVdjE5OUUzN0J4M0ZPUWlNNFdwU2Jjci9OUTUwbVRxemp6R2p3TVRJKy93QXI4dEM3cFgK",
+      "endpoints": [
+        "https://porchlight-beryl.vercel.app/updates/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

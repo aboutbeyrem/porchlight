@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy notes: what Porchlight sends, and to whom</title>
+  <meta name="description" content="Porchlight has no account, no analytics and no cloud. This page lists every connection the Windows app makes, what it carries, and what it never sends.">
+  <meta name="theme-color" content="#0e1726">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='14' r='7' fill='%23f5b62a'/%3E%3Crect x='12' y='22' width='8' height='5' rx='1' fill='%230e1726'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/site.css">
+</head>
+<body class="doc">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="night doc-head">
+    <nav class="wrap nav" aria-label="Main">
+      <a class="brand" href="/">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10" /><path d="M12 3v3" /><path d="M8.5 6h7l1.5 6h-10z" /><circle cx="12" cy="15.5" r="2.2" class="bulb" /></svg>
+        Porchlight
+      </a>
+      <div class="nav-links">
+        <a href="/#app">Download</a>
+        <a href="https://github.com/aboutbeyrem/porchlight">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main" class="wrap doc-body">
+    <h1 class="title">Privacy notes</h1>
+    <p class="intro">Porchlight has no account, no analytics, no advertising and no cloud. What it learns about your network stays in one file on your computer. Here is every connection the Windows app makes, so you can check for yourself.</p>
+
+    <h2>Connections inside your network</h2>
+    <p>To do its job, Porchlight talks to the devices on the network you told it is yours:</p>
+    <ul>
+      <li><b>"Who has this address?"</b> (ARP) to every address on your home network, to find the devices that are on.</li>
+      <li><b>Asking devices their name</b> the way your computer already does (mDNS, NetBIOS, UPnP, and the names they advertise for their services), asking your router which name each device gave it when it joined, and opening each device's own front page to read its title.</li>
+      <li><b>Knocking on common doors</b>: a connection to a short list of ports that is closed straight away, plus a harmless hello to camera streams, Windows file sharing and Remote Desktop to see how they answer. It never logs in, never tries a password, never changes a setting.</li>
+      <li><b>Listing the ports your router opened</b> for devices (UPnP), read-only.</li>
+      <li><b>Listening to Wi-Fi</b> beacons your access points broadcast to everyone anyway, and this computer's own connection events. Nothing is sent over the air.</li>
+    </ul>
+
+    <h2>Connections that leave your network</h2>
+    <ul>
+      <li><b>One update check a day</b> to <code>porchlight-beryl.vercel.app</code>, which hosts this site (on Vercel). It asks for a small file that says which version is newest. Like any website visit, the host sees your IP address; nothing else is sent. When you choose to install an update, the installer comes from the same address and is only used if its signature matches the key built into Porchlight.</li>
+      <li><b>One DNS test lookup</b> per full checkup, for a made-up name under <code>example.com</code> (a name reserved for testing), sent to your usual DNS server. It shows whether your DNS invents answers for websites that don't exist. The name is random and says nothing about you.</li>
+    </ul>
+    <p>That's all. There is no telemetry, no crash reporting and no "phone home".</p>
+
+    <h2>What stays on your computer</h2>
+    <ul>
+      <li><code>porchlight-state.json</code>: the devices it has seen, names you gave them, alerts and settings.</li>
+      <li><code>porchlight.log</code>: what each check did and how long it took, capped at about half a megabyte.</li>
+    </ul>
+    <p>Both are in <code>%APPDATA%\com.aboutbeyrem.porchlight</code>. <b>Settings → Forget everything</b> deletes the first and stops Porchlight from starting with Windows; uninstalling removes the app.</p>
+
+    <h2>If you report a problem</h2>
+    <p><b>Settings → Save diagnostic file</b> writes a text file to your Downloads folder. It has counts (for example "3 × phone or tablet"), check IDs, timings and the recent log with every address removed. It never contains device names, Wi-Fi names or addresses. Nothing is sent automatically: you decide whether to attach it to a report on GitHub.</p>
+
+    <h2>The website</h2>
+    <p>This site has no cookies, no analytics and no third-party scripts. The demo at <a href="/demo/">/demo</a> shows a made-up home and never scans anything.</p>
+
+    <p class="muted">Questions: open an issue on <a href="https://github.com/aboutbeyrem/porchlight/issues">GitHub</a>. Last updated 20 November 2026.</p>
+  </main>
+
+  <footer>
+    <div class="wrap foot">
+      <span>Porchlight is made by <a href="https://www.aboutbeyrem.com">Beyrem Oueslati</a>.</span>
+      <span><a href="/privacy/">Privacy</a> · Open source under the MIT license.</span>
+    </div>
+  </footer>
+</body>
+</html>

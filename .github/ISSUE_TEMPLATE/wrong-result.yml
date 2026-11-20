@@ -1,0 +1,34 @@
+name: A wrong or missing result
+description: A false alarm, a problem Porchlight missed, a device it named or recognised wrongly, or a device it didn't see.
+labels: [accuracy]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of mistake?
+      options:
+        - It warned about something that isn't a problem (false alarm)
+        - It missed a problem I know about
+        - It named a device wrongly, or couldn't name it
+        - It got a device's type wrong (phone, camera, TV...)
+        - A device on my network didn't show up
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: check
+    attributes:
+      label: Check ID, if there is one
+      description: Shown in the diagnostic file next to each finding, for example PL-WPS or PL-NO-PMF.
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What Porchlight said, and what is actually true. For devices, the make and model help a lot (for example "TP-Link Tapo C200 camera").
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostic file
+      description: Settings → Help → Save diagnostic file, then drag the file here.

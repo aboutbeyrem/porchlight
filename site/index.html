@@ -60,7 +60,7 @@
         <a class="btn primary" href="#app">Download for Windows</a>
         <a class="btn ghost" href="/demo/">Try the live demo</a>
       </div>
-      <p class="fine reveal-in">Free and open source · Windows app, 2 MB · nothing leaves your computer</p>
+      <p class="fine reveal-in">Free and open source · Windows app, 3 MB · no account, nothing about you leaves your computer</p>
 
       <ul class="yard" aria-label="Example: devices Porchlight found in a made-up home">
         <li class="chip"><span class="dot good"></span><span><b>Home router</b><small>router</small></span></li>
@@ -90,12 +90,14 @@
           <li class="reveal"><b>A new device joins</b><span>You get a notification with what it is and who made it, so a stranger on your Wi-Fi doesn't go unnoticed.</span></li>
           <li class="reveal"><b>Something pretends to be your router</b><span>The first step of a man-in-the-middle attack (ARP spoofing) is caught as it happens.</span></li>
           <li class="reveal"><b>A fake copy of your Wi-Fi appears</b><span>An "evil twin" broadcasting your network's name with weaker protection, spotted without any special adapter.</span></li>
-          <li class="reveal"><b>Your Wi-Fi can be attacked</b><span>Kick-off (deauthentication) protection, WPS, and the open networks your computer would join by itself (what MANA attacks use).</span></li>
+          <li class="reveal"><b>Someone keeps kicking you off the Wi-Fi</b><span>Repeated drops with a good signal are the first step of many Wi-Fi attacks. Porchlight listens live and warns you the moment it happens.</span></li>
+          <li class="reveal"><b>Your Wi-Fi can be attacked</b><span>Kick-off protection (PMF), WPS, and the open networks your computer would join by itself (what MANA attacks use).</span></li>
+          <li class="reveal"><b>Your DNS is tampered with</b><span>New DNS servers, a device answering lookups in your router's place, or a DNS that invents answers: the signs of a hijacked router.</span></li>
         </ul>
         <div class="download reveal">
-          <a class="btn primary" href="/download/Porchlight_0.5.0_x64-setup.exe" download>Download Porchlight 0.5.0 for Windows</a>
-          <p class="fine-dark">Windows 10 and 11 · 2 MB · installs for your user only, no admin needed.<br>
-          The installer isn't code-signed yet, so Windows may show "Windows protected your PC": choose <b>More info → Run anyway</b>. You can check the file: SHA-256 <code class="hash">510987662926e362d45b54d55a7f0c1d81e227884dae962d022ad0b40d7a0d1a</code>, and the source is on <a href="https://github.com/aboutbeyrem/porchlight">GitHub</a>.</p>
+          <a class="btn primary" href="/download/Porchlight_0.6.0_x64-setup.exe" download>Download Porchlight 0.6.0 for Windows</a>
+          <p class="fine-dark">Windows 10 and 11 · 3 MB · installs for your user only, no admin needed. Updates are signed and only installed when you say so.<br>
+          The installer isn't code-signed by Microsoft yet, so Windows may show "Windows protected your PC": choose <b>More info → Run anyway</b>. You can check the file: SHA-256 <code class="hash">510987662926e362d45b54d55a7f0c1d81e227884dae962d022ad0b40d7a0d1a</code>, and the source is on <a href="https://github.com/aboutbeyrem/porchlight">GitHub</a>.</p>
         </div>
       </div>
     </section>
@@ -237,7 +239,7 @@ node bin/porchlight.js</code></pre>
   <footer>
     <div class="wrap foot">
       <span>Porchlight is made by <a href="https://www.aboutbeyrem.com">Beyrem Oueslati</a>.</span>
-      <span>Open source under the MIT license.</span>
+      <span><a href="/privacy/">Privacy notes</a> · Open source under the MIT license.</span>
     </div>
   </footer>
 </body>

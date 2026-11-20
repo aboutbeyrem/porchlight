@@ -247,3 +247,13 @@ footer { margin-top: 110px; padding: 28px 0 44px; border-top: 1px solid var(--li
 .download { margin-top: 30px; display: grid; gap: 12px; justify-items: start; }
 .fine-dark { margin: 0; color: var(--ink-2); font-size: 0.9rem; max-width: 62ch; }
 .hash { font-size: 0.78rem; overflow-wrap: anywhere; user-select: all; }
+
+/* Plain document pages (privacy notes): the night header without the hero, then readable text. */
+.doc-head { padding-bottom: 6px; }
+.doc-body { max-width: 46em; padding-top: 56px; }
+.doc-body h2 { font-family: var(--serif); font-weight: 600; font-size: 1.45rem; margin: 38px 0 10px; }
+.doc-body ul { padding-left: 20px; color: var(--ink-2); }
+.doc-body li { margin-bottom: 10px; }
+.doc-body li b, .doc-body p b { color: var(--ink); }
+.doc-body p { color: var(--ink-2); }
+.doc-body .muted { margin-top: 40px; font-size: 0.92rem; }

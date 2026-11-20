@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: A security problem in Porchlight itself
+    url: https://github.com/aboutbeyrem/porchlight/blob/main/SECURITY.md
+    about: Please report vulnerabilities privately, as described in SECURITY.md, not in a public issue.
+  - name: What Porchlight sends, and to whom
+    url: https://porchlight-beryl.vercel.app/privacy/
+    about: The privacy notes list every connection the app makes.
