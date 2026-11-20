@@ -230,3 +230,14 @@ test("devices behind a MAC-rewriting repeater: not a second extender, and rememb
   const entry = updateEntry(null, [router, ext, phone], [], "2026-11-13T18:00:00Z");
   assert.deepEqual(Object.keys(entry.devices).sort(), ["02:00:00:00:00:01", "82:3a:7c:10:5e:21@192.168.50.30", "82:3a:7c:10:5e:21@192.168.50.44"]);
 });
+
+test("history: a home checkup can't call office-only problems fixed", () => {
+  const signing = { level: "worth-fixing", id: "PL-SMB-SIGNING", title: "File sharing doesn't require signing", device: router.ip, fix: ["a"] };
+  const unknown = { level: "worth-fixing", id: "PL-UNKNOWN-DEVICE", title: "2 devices are not on your list of known devices", device: null, fix: ["a"] };
+  const entry = updateEntry(null, [router], [signing, unknown], "2026-11-20T10:00:00Z");
+  const home = compare(entry, [router], [], new Set(), { profile: "home", inventory: false });
+  assert.deepEqual(home.fixed, []);
+  assert.deepEqual(home.unverified.map((p) => p.id).sort(), ["PL-SMB-SIGNING", "PL-UNKNOWN-DEVICE"]);
+  const office = compare(entry, [router], [], new Set(), { profile: "office", inventory: true });
+  assert.deepEqual(office.fixed.map((p) => p.id).sort(), ["PL-SMB-SIGNING", "PL-UNKNOWN-DEVICE"]);
+});

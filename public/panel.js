@@ -33,12 +33,20 @@ async function loadContext() {
   sel.append(el("option", { value: "" }, names.length ? "I'm not sure / skip the Wi-Fi check" : "No Wi-Fi adapter: skip the Wi-Fi check"));
   for (const n of names) sel.append(el("option", { value: n }, n + (n === ctx.connectedSsid ? " (connected)" : "")));
   if (ctx?.connectedSsid) sel.value = ctx.connectedSsid;
+  const p = ctx?.policy;
+  $("c-policy").hidden = !p;
+  if (p) {
+    $("c-policy").textContent = `Using the policy${p.organization ? ` for ${p.organization}` : ""}: ${p.knownDevices} known devices, ${p.accepted} accepted risks${p.ranges?.length ? `, ranges ${p.ranges.join(", ")} authorised by ${p.authorizedBy}` : ""}.`;
+    const radio = document.querySelector(`input[name=profile][value="${p.profile}"]`);
+    if (radio) radio.checked = true;
+  }
   $("c-start").disabled = !$("c-ok").checked || !ctx?.network;
 }
 
 async function start() {
   const homeSsid = $("c-ssid").value || null;
-  const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ consent: true, homeSsid }) });
+  const profile = document.querySelector("input[name=profile]:checked")?.value || "home";
+  const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ consent: true, homeSsid, profile }) });
   if (!r.ok && r.status !== 409) return fail((await r.json()).error);
   show("running");
   poll();
@@ -58,7 +66,7 @@ function fail(msg) {
 }
 
 // ---------- results ----------
-const worstLevel = (fs) => ORDER.find((l) => fs.some((f) => f.level === l)) || null;
+const worstLevel = (fs) => ORDER.find((l) => fs.some((f) => f.level === l && !f.accepted)) || (fs.length ? "all-good" : null);
 const shortName = (d) => d.name.replace(` (${d.ip})`, "").replace(/ at \d+\.\d+\.\d+\.\d+$/, "");
 const findingsFor = (ip) => report.findings.filter((f) => f.device === ip);
 const smooth = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
@@ -92,22 +100,23 @@ function renderChanges(rep) {
 function renderCounts() {
   const counts = $("s-counts");
   counts.replaceChildren();
-  for (const l of ORDER) {
-    const n = report.findings.filter((f) => f.level === l).length;
+  const levels = [...ORDER, "accepted"];
+  for (const l of levels) {
+    const n = report.findings.filter((f) => (l === "accepted" ? f.accepted : f.level === l && !f.accepted)).length;
     if (!n) continue;
     counts.append(el("button", {
-      class: `pill lvl-${l}${filter.level === l ? " on" : ""}`,
+      class: `pill ${l === "accepted" ? "accepted" : `lvl-${l}`}${filter.level === l ? " on" : ""}`,
       "aria-pressed": String(filter.level === l),
-      title: filter.level === l ? "Show everything" : `Show "${LABEL[l]}" only`,
+      title: filter.level === l ? "Show everything" : `Show "${LABEL[l] || "Accepted"}" only`,
       onclick: () => { filter.level = filter.level === l ? null : l; filter.device = null; renderList(); },
-    }, `${n} ${LABEL[l].toLowerCase()}`));
+    }, `${n} ${(LABEL[l] || "accepted").toLowerCase()}`));
   }
 }
 
 function deviceNode(d, extra = []) {
   const fs = findingsFor(d.ip);
   const lvl = worstLevel(fs);
-  const issues = fs.filter((f) => f.level === "fix-soon" || f.level === "worth-fixing").length;
+  const issues = fs.filter((f) => !f.accepted && (f.level === "fix-soon" || f.level === "worth-fixing")).length;
   return el("button", {
     class: `node${filter.device === d.ip ? " on" : ""}`,
     "aria-pressed": String(filter.device === d.ip),
@@ -141,27 +150,44 @@ function renderMap() {
     el("li", {}, deviceNode(d, d.broadcasts?.length ? el("span", { class: "node-kind" }, `Broadcasts "${d.broadcasts.join('", "')}"`) : null))));
 }
 
+function techDetails(f) {
+  const refs = [...(f.cis || []).map((c) => `CIS Controls v8 ${c}`), ...(f.refs || [])];
+  if (!f.technical && !refs.length && !f.id) return null;
+  return el("details", { class: "tech" },
+    el("summary", {}, "Details for IT"),
+    el("dl", {},
+      el("div", {}, el("dt", {}, "Check"), el("dd", { class: "mono" }, `${f.id || "?"} · severity ${f.severity || "?"}`)),
+      f.technical ? el("div", {}, el("dt", {}, "Observed"), el("dd", { class: "mono" }, f.technical)) : null,
+      refs.length ? el("div", {}, el("dt", {}, "References"), el("dd", {}, refs.join(", "))) : null));
+}
+
 function findingCard(f) {
   const fix = f.fix.length ? el("div", {}, el("dt", {}, `How to fix it${f.minutes ? ` (about ${f.minutes} min)` : ""}`), el("dd", {}, el("ol", {}, f.fix.map((s) => el("li", {}, s))))) : null;
-  return el("article", { class: `panel finding f-${f.level}` },
-    el("span", { class: `pill lvl-${f.level}` }, LABEL[f.level]),
+  return el("article", { class: `panel finding f-${f.level}${f.accepted ? " is-accepted" : ""}` },
+    el("div", { class: "meta-row" },
+      el("span", { class: `pill lvl-${f.level}` }, LABEL[f.level]),
+      f.accepted ? el("span", { class: "pill accepted" }, `Accepted${f.accepted.until ? ` until ${f.accepted.until}` : ""}`) : null,
+      f.id ? el("span", { class: "fid" }, f.id) : null),
     el("h2", {}, f.title),
     f.deviceName ? el("p", { class: "dev" }, f.deviceName) : null,
     el("dl", {},
       el("div", {}, el("dt", {}, "What we found"), el("dd", {}, f.found)),
       el("div", {}, el("dt", {}, "What that means"), el("dd", {}, f.means)),
       el("div", {}, el("dt", {}, "How likely it matters"), el("dd", {}, f.likely)),
-      fix));
+      f.accepted ? el("div", {}, el("dt", {}, "Why it's accepted"), el("dd", {}, `${f.accepted.reason}${f.accepted.by ? ` (${f.accepted.by})` : ""}`)) : null,
+      fix),
+    techDetails(f));
 }
 
 function renderList() {
-  const shown = report.findings.filter((f) => (!filter.level || f.level === filter.level) && (!filter.device || f.device === filter.device));
+  const levelMatch = (f) => !filter.level || (filter.level === "accepted" ? f.accepted : f.level === filter.level && !f.accepted);
+  const shown = report.findings.filter((f) => levelMatch(f) && (!filter.device || f.device === filter.device));
   $("filter-note").hidden = !filter.level && !filter.device;
   if (filter.device) {
     const d = report.devices.find((x) => x.ip === filter.device);
     $("filter-text").textContent = shown.length ? `Showing what Porchlight found on ${shortName(d)}.` : `Porchlight found nothing to report on ${shortName(d)}.`;
   } else if (filter.level) {
-    $("filter-text").textContent = `Showing "${LABEL[filter.level]}" only.`;
+    $("filter-text").textContent = `Showing "${LABEL[filter.level] || "Accepted"}" only.`;
   }
   $("list").replaceChildren(...shown.map(findingCard));
   renderCounts();
@@ -172,10 +198,11 @@ function render(rep) {
   report = rep;
   filter.level = filter.device = null;
   $("demo-note").hidden = !rep.demo;
+  $("dl-html").hidden = $("dl-csv").hidden = Boolean(rep.demo);
   renderScore(rep.score);
   $("s-sentence").textContent = rep.summary;
   const when = new Date(rep.when).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-  $("s-meta").textContent = `Checked ${rep.devices.length} devices on ${rep.network.cidr} on ${when}, in ${rep.durationSec} seconds.${rep.homeSsid ? ` Your Wi-Fi: "${rep.homeSsid}".` : ""}`;
+  $("s-meta").textContent = `Checked ${rep.devices.length} devices on ${(rep.scope || [rep.network.cidr]).join(", ")} on ${when}, in ${rep.durationSec} seconds${rep.profile === "office" ? " (office checks)" : ""}.${rep.homeSsid ? ` Wi-Fi: "${rep.homeSsid}".` : ""}${rep.authorization ? ` Authorised by ${rep.authorization.by}.` : ""}`;
   renderChanges(rep);
   renderList();
   $("d-count").textContent = rep.devices.length;

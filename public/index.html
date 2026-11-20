@@ -15,7 +15,7 @@
 
   <main>
     <section id="consent" class="panel" hidden>
-      <h1>Is this your home network?</h1>
+      <h1>Is this your network?</h1>
       <p class="lead">Porchlight will look at the devices on the network this computer is connected to. It only reads what they show; it never logs into anything or changes any setting, and nothing leaves this computer.</p>
       <dl class="facts">
         <div><dt>Network</dt><dd id="c-net">…</dd></div>
@@ -25,7 +25,13 @@
         <select id="c-ssid"></select>
         <span class="hint">So Porchlight can check how it's protected. It never needs your Wi-Fi password.</span>
       </label>
-      <label class="check"><input type="checkbox" id="c-ok"> Yes, this is my home network and I'm allowed to check it.</label>
+      <fieldset class="profile">
+        <legend>What kind of network is it?</legend>
+        <label><input type="radio" name="profile" value="home" checked> <span><b>Home</b> Gentle checks for routers, cameras, Wi-Fi and smart devices.</span></label>
+        <label><input type="radio" name="profile" value="office"> <span><b>Office</b> Also checks databases, file-sharing signing, encryption and certificates. For IT staff.</span></label>
+      </fieldset>
+      <p class="policy-note" id="c-policy" hidden></p>
+      <label class="check"><input type="checkbox" id="c-ok"> <span id="c-ok-text">Yes, this is my network and I'm allowed to check it.</span></label>
       <button id="c-start" class="primary" disabled>Start the checkup</button>
     </section>
 
@@ -55,6 +61,8 @@
         <div class="actions">
           <button id="again" class="secondary">Check again</button>
           <button id="pdf" class="secondary">Save as PDF</button>
+          <a id="dl-html" class="secondary button" href="/api/report.html" download>Report (HTML)</a>
+          <a id="dl-csv" class="secondary button" href="/api/report.csv" download>Findings (CSV)</a>
         </div>
       </div>
 

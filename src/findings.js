@@ -45,6 +45,7 @@ export function deviceKind(d) {
 
 export function deviceName(d) {
   if (d.self) return "This computer";
+  if (d.knownName) return `${d.knownName} (${d.ip})`;
   if (d.isRouter) return d.friendlyName ? `Your router (${d.friendlyName})` : "Your router";
   const clean = (s) => s?.replace(/\.(lan|home|local|localdomain)$/i, "");
   const label = d.friendlyName || d.mdns?.name || d.web?.label || d.netbios?.name || clean(d.hostname) || clean(d.mdns?.host);
@@ -244,6 +245,22 @@ export function lookalikeFindings(args) {
   });
 }
 
+// ---------- Known devices (office policy) ----------
+export function inventoryFindings(devices, policy) {
+  if (!policy?.knownDevices?.length) return [];
+  const unknown = devices.filter((d) => !d.self && !d.knownName);
+  if (!unknown.length) return [];
+  const one = unknown.length === 1;
+  const list = unknown.map((d) => `${deviceName(d)} (${deviceKind(d)}${d.mac ? `, MAC ${d.mac}` : ""})`).join("; ");
+  return [{ ...finding(policy.profile === "office" ? "worth-fixing" : "good-to-know", one ? unknown[0] : null,
+    one ? "Device is not on your list of known devices" : `${unknown.length} devices are not on your list of known devices`,
+    `${one ? "This device isn't" : "These devices aren't"} in the policy's list of known devices: ${list}.`,
+    "An inventory is how you notice equipment nobody approved: a forgotten test machine, a personal device, or something planted.",
+    "Depends on what it is. Most unknown devices turn out to be harmless, but each one should have an owner.",
+    ["Find out what each one is and who owns it (address, type and open services are in the device list).", "If it belongs, add it to knownDevices in the policy file with a name.", "If it doesn't, remove it from the network and change the Wi-Fi password if it joined over Wi-Fi."], 10),
+    technical: unknown.map((d) => `${d.ip}${d.mac ? ` ${d.mac}` : ""}`).join(", ") }];
+}
+
 // ---------- Since the last checkup ----------
 export function changeFindings(changes) {
   const out = [];
@@ -272,12 +289,119 @@ export function changeFindings(changes) {
 // ---------- A score out of 100, from the problems only (notes and good news don't cost points) ----------
 export function scoreOf(findings) {
   const cost = { "fix-soon": 25, "worth-fixing": 10 };
-  const value = Math.max(0, 100 - findings.reduce((s, f) => s + (cost[f.level] || 0), 0));
+  const value = Math.max(0, 100 - findings.filter((f) => !f.accepted).reduce((s, f) => s + (cost[f.level] || 0), 0));
   const label = value >= 90 ? "Well protected" : value >= 70 ? "A few things to tidy up" : value >= 45 ? "Needs some attention" : "Start with the top items";
   return { value, label };
 }
 
-export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid, firewall = null }) {
+// ---------- Deeper service checks: SMB, Remote Desktop, TLS, databases ----------
+const fixFor = (d, router, nas, windows) => (d.isRouter ? router : d.netbios || d.self || /computer/.test(deviceKind(d)) ? windows : nas);
+
+export function serviceFindings(d, name, profile = "home", mappings = []) {
+  const out = [];
+  const office = profile === "office";
+  const ports = d.ports || [];
+
+  if (d.smb?.smb1) {
+    out.push(finding("worth-fixing", d, "Old file-sharing protocol SMBv1 is on",
+      `${name} still accepts SMB version 1, the Windows file-sharing protocol from the 1990s.`,
+      "SMBv1 has no protection against tampering, and it's what the 2017 WannaCry and NotPetya outbreaks spread through on unpatched Windows. Microsoft has turned it off by default in new Windows installations since 2017.",
+      "Low to moderate: it needs someone on your network, and the worst attacks only work on unpatched Windows. On a router or storage drive it mainly weakens file sharing.",
+      fixFor(d,
+        [`Open your router's settings page (http://${d.ip}) and log in.`, "Under USB, Storage or File sharing (Samba), set the minimum SMB version to SMB2, or turn off \"SMBv1\" / \"NT1\" / \"compatibility mode\".", "If there's no such setting, turn file sharing off unless you use it.", "Run Porchlight again."],
+        ["In the storage device's file services settings, set the minimum SMB version to SMB2.", "Run Porchlight again."],
+        ["Open PowerShell as administrator and run: Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol", "Or: Control Panel → Programs → Turn Windows features on or off → untick \"SMB 1.0/CIFS File Sharing Support\".", "Restart, then run Porchlight again."]), 10));
+  }
+
+  if (office && d.smb && d.smb.signingRequired === false && !d.isRouter) {
+    out.push(finding("worth-fixing", d, "File sharing doesn't require signing",
+      `${name} accepts SMB file-sharing connections without requiring them to be signed (dialect ${d.smb.dialect || "unknown"}).`,
+      "Without signing, someone on the network who can intercept traffic can relay a user's login to this machine and act as that user (an \"SMB relay\").",
+      "Moderate in an office: relay attacks are a standard step once an attacker is inside the network.",
+      fixFor(d, [],
+        ["In the device's SMB/Samba settings, set signing to \"mandatory\" (Samba: server signing = mandatory)."],
+        ["Group Policy: Computer Configuration → Windows Settings → Security Settings → Local Policies → Security Options → \"Microsoft network server: Digitally sign communications (always)\" → Enabled.", "Or in PowerShell as administrator: Set-SmbServerConfiguration -RequireSecuritySignature $true -Force", "Run Porchlight again."]), 15));
+  }
+
+  if (d.rdp && d.rdp.nla === false) {
+    const fwd = forwardedTo(mappings, d.ip, 3389);
+    out.push({
+      ...finding(fwd ? "fix-soon" : "worth-fixing", d, "Remote Desktop doesn't require sign-in first (NLA is off)",
+        `${name} lets anyone reach its Windows sign-in screen over Remote Desktop before proving who they are (Network Level Authentication is off).`,
+        "With NLA on, Windows checks the user's password before starting a session. Without it, anyone who can connect gets a full session screen first, which uses more resources and exposes flaws that only work before sign-in, like BlueKeep (CVE-2019-0708).",
+        fwd ? "High: it's forwarded to the internet, where Remote Desktop is attacked constantly." : "Moderate: it needs someone on your network.",
+        ["On that computer: Settings → System → Remote Desktop → Advanced settings → tick \"Require computers to use Network Level Authentication to connect\".", "Group Policy: Computer Configuration → Administrative Templates → Windows Components → Remote Desktop Services → Remote Desktop Session Host → Security → \"Require user authentication for remote connections by using Network Level Authentication\" → Enabled.", "Run Porchlight again."], 5),
+      exposed: Boolean(fwd),
+    });
+  }
+
+  for (const [port, t] of Object.entries(d.tls || {})) {
+    if (!t) continue;
+    const where = `${name}, port ${port}`;
+    if (t.oldVersions?.length) {
+      out.push(finding(office ? "worth-fixing" : "good-to-know", d, "Encrypted service still accepts old TLS versions",
+        `${where} accepts ${t.oldVersions.join(" and ")}, versions of encryption retired in 2021 (RFC 8996).`,
+        "Old TLS versions have known weaknesses and fail most security standards (PCI DSS, for example). Modern browsers no longer use them.",
+        "Low: attacking them takes effort and a position on the network, but auditors flag them.",
+        ["In the device or server's HTTPS/TLS settings, set the minimum version to TLS 1.2.", "On Windows servers, IIS Crypto or the registry keys under SCHANNEL\\Protocols can turn off TLS 1.0 and 1.1.", "Run Porchlight again."], 15));
+    }
+    const c = t.cert;
+    if (!office || !c) continue;
+    if (c.expired) {
+      out.push(finding("worth-fixing", d, "Expired security certificate",
+        `${where} uses a certificate${c.subject ? ` for "${c.subject}"` : ""} that expired on ${c.expires.slice(0, 10)}.`,
+        "Browsers show a warning, and people who get used to clicking past warnings won't notice a real one.",
+        "Low to moderate.", ["Renew the certificate (or set up automatic renewal), then install it on this device.", "Run Porchlight again."], 20));
+    } else if (c.daysLeft <= 30) {
+      out.push(finding("good-to-know", d, "Security certificate expires soon",
+        `${where} uses a certificate that expires on ${c.expires.slice(0, 10)} (${c.daysLeft} days).`,
+        "When it expires, browsers will start showing warnings for this service.", "Low.", ["Renew it before it expires, or set up automatic renewal."], 20));
+    }
+    if (c.selfSigned && !c.expired && !d.isRouter) {
+      out.push(finding("good-to-know", d, "Self-signed security certificate",
+        `${where} uses a certificate it signed itself${c.subject ? ` ("${c.subject}")` : ""}, so browsers can't confirm it's the real device.`,
+        "That's common on printers and appliances. The connection is encrypted, but people learn to click through warnings.",
+        "Low.", ["If this is a service people use daily, install a certificate from your organisation's certificate authority."], 30));
+    }
+    if (c.bits && c.bits < 2048) {
+      out.push(finding("good-to-know", d, "Weak certificate key",
+        `${where} uses a ${c.bits}-bit key. 2048 bits is today's minimum.`, "Short keys can be broken with enough computing power.", "Low.",
+        ["Generate a new 2048-bit (or larger) key and certificate for this service."], 20));
+    }
+  }
+
+  if (d.redis?.auth === false) {
+    out.push(finding("fix-soon", d, "Database answers without a password (Redis)",
+      `${name} runs Redis on port 6379 and it answered our harmless "PING" without asking for a password.`,
+      "Anyone on the network can read, change or delete everything stored in it, and an open Redis is a well-known way to take over the server it runs on.",
+      "High in an office: attackers who get inside a network look for exactly this.",
+      ["Set a password (requirepass, or ACL users in Redis 6+) and restart Redis.", "Bind Redis to 127.0.0.1 unless other machines need it, and keep protected-mode on.", "Run Porchlight again."], 15));
+  }
+  if (d.elastic?.auth === false) {
+    out.push(finding("fix-soon", d, "Search database answers without a password (Elasticsearch)",
+      `${name} runs Elasticsearch${d.elastic.version ? ` ${d.elastic.version}` : ""} on port 9200 and its front page answered without asking for a password.`,
+      "Anyone on the network can read and delete the data in it. Open Elasticsearch servers are one of the most common causes of data leaks.",
+      "High.", ["Turn on Elasticsearch security (xpack.security.enabled: true) and create users with passwords.", "Limit who can reach port 9200 with a firewall.", "Run Porchlight again."], 30));
+  }
+  if (ports.includes(11211)) {
+    out.push(finding("worth-fixing", d, "Cache server with no password (Memcached)",
+      `${name} runs Memcached on port 11211. Memcached has no passwords in its usual setup.`,
+      "Anyone on the network can read and change what's cached, which often includes user sessions.",
+      "Moderate.", ["Bind Memcached to 127.0.0.1 (-l 127.0.0.1) unless other servers need it, and firewall port 11211.", "Run Porchlight again."], 10));
+  }
+  const dbs = [[3306, "MySQL / MariaDB"], [5432, "PostgreSQL"], [1433, "SQL Server"], [27017, "MongoDB"], [5984, "CouchDB"], [6379, "Redis"]]
+    .filter(([p]) => ports.includes(p) && !(p === 6379 && d.redis?.auth === false));
+  if (office && dbs.length) {
+    out.push(finding("good-to-know", d, "Database reachable from the whole network",
+      `${name} accepts connections to ${dbs.map(([p, n]) => `${n} (port ${p})`).join(", ")}${d.mysql?.version ? `. MySQL says it's version ${d.mysql.version}` : ""}.`,
+      "Porchlight doesn't try to log in, so it can't tell how strong the passwords are. Best practice is that only the servers that need a database can reach it.",
+      "Low, if accounts have strong passwords and the software is up to date.",
+      ["Check that every database account has a strong password and that there's no account without one.", "Use a firewall rule so only the application servers can reach these ports.", "Keep the database software updated."], 20));
+  }
+  return out;
+}
+
+export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid, firewall = null, profile = "home" }) {
   const out = [];
   const mappings = upnp?.router?.mappings || [];
 
@@ -351,7 +475,7 @@ export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid, fire
         ["If you don't use remote control, turn VNC off.", "If you do, set a long password (12+ characters).", "Run Porchlight again."], 5));
     }
 
-    if (ports.includes(3389) && !d.self) {
+    if (ports.includes(3389) && !d.self && profile === "home") {
       out.push(finding("good-to-know", d, "Windows Remote Desktop is on",
         `${name} accepts Remote Desktop connections.`,
         "That's fine inside your home as long as the Windows account has a strong password. It becomes risky only if your router forwards it to the internet" + (forwardedTo(mappings, d.ip, 3389) ? ", and right now it does." : ". No device has asked your router to do that (we checked); a port forward set up by hand wouldn't show here."),
@@ -366,6 +490,8 @@ export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid, fire
         "Low: it needs someone on your network.",
         ["In your smart-home hub's settings, make sure MQTT requires a username and password."], 5));
     }
+
+    out.push(...serviceFindings(d, name, profile, mappings));
 
     const kind = deviceKind(d);
     if (d.web && !d.isRouter && (kind === EXTENDER || kind === CAMERA)) {
@@ -464,7 +590,7 @@ export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid, fire
 }
 
 export function summarize(findings) {
-  const n = (lvl) => findings.filter((f) => f.level === lvl).length;
+  const n = (lvl) => findings.filter((f) => f.level === lvl && !f.accepted).length;
   const soon = n("fix-soon");
   const worth = n("worth-fixing");
   if (soon + worth === 0) return "Nothing needs fixing. A few notes are below if you're curious.";

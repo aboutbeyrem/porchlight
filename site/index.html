@@ -137,7 +137,7 @@
             <a class="btn primary" href="#run">Run it on your network</a>
             <a class="btn ghost" href="#sample">See a sample report</a>
           </div>
-          <p class="fine">Free and open source, for Windows and Linux. Nothing leaves your computer.</p>
+          <p class="fine">Free and open source, for Windows and Linux. Nothing leaves your computer. Also has an office mode for IT teams.</p>
         </div>
         <div class="lit">
           <article class="card" aria-label="Example finding">
@@ -189,6 +189,20 @@
         <img src="panel-sample.png" width="860" height="1240" loading="lazy" alt="A sample Porchlight report of a made-up home: a score of 60 out of 100, one new device and one fix since last week, and a map of the network with each device coloured by what was found on it.">
         <figcaption>A sample report of a made-up home: the score, what changed since last week, and a map of the network. Tap a device to see what was found on it.</figcaption>
       </figure>
+    </section>
+
+    <section id="office" aria-labelledby="office-title">
+      <h2 class="title" id="office-title">For small offices</h2>
+      <p class="intro">The office profile adds the checks an IT team needs, and every finding carries a stable ID, a severity, what was observed, and the related CIS Controls v8 safeguards.</p>
+      <dl class="checks">
+        <div><dt>Windows and servers</dt><dd>SMBv1 still on, SMB signing not required, Remote Desktop without Network Level Authentication.</dd></div>
+        <div><dt>Encryption</dt><dd>Old TLS versions, expired or expiring certificates, self-signed certificates and weak keys.</dd></div>
+        <div><dt>Databases</dt><dd>Redis and Elasticsearch that answer without a password, and databases reachable from the whole network.</dd></div>
+        <div><dt>Inventory</dt><dd>A policy file lists known devices; anything else is flagged, so equipment nobody approved gets noticed.</dd></div>
+        <div><dt>Accepted risks</dt><dd>Reviewed findings stay in the report with who accepted them, why, and until when, and stop counting against the score.</dd></div>
+        <div><dt>Reports and automation</dt><dd>A self-contained HTML report for managers, CSV for tickets, and exit codes so a weekly scheduled run can raise an alarm.</dd></div>
+      </dl>
+      <p class="intro">Other ranges must be private addresses and need the name of whoever authorised the check, which goes into every report. Porchlight is a first-line checkup, not a certified compliance scanner or a penetration test.</p>
     </section>
 
     <section id="never" aria-labelledby="never-title">

@@ -2,6 +2,10 @@
  "demo": true,
  "when": "2026-11-20T18:00:00.000Z",
  "durationSec": 34,
+ "profile": "home",
+ "scope": [
+  "192.168.1.0/24"
+ ],
  "network": {
   "cidr": "192.168.1.0/24",
   "gateway": "192.168.1.1",
@@ -205,7 +209,17 @@
     "If you don't use the camera with other apps, turn RTSP off completely.",
     "Run Porchlight again to confirm."
    ],
-   "minutes": 5
+   "minutes": 5,
+   "id": "PL-RTSP-OPEN",
+   "severity": "medium",
+   "cis": [
+    "4.1",
+    "3.3"
+   ],
+   "refs": [
+    "CWE-306"
+   ],
+   "technical": "RTSP DESCRIBE rtsp://192.168.1.120:554/live → 200 OK without credentials; MAC 02:44:55:66:77:88"
   },
   {
    "level": "worth-fixing",
@@ -221,7 +235,16 @@
     "If you can't find Developer options, the maker may have left it on by default: check for a firmware update.",
     "Run Porchlight again to confirm it's closed."
    ],
-   "minutes": 5
+   "minutes": 5,
+   "id": "PL-ADB",
+   "severity": "medium",
+   "cis": [
+    "4.8"
+   ],
+   "refs": [
+    "CWE-306"
+   ],
+   "technical": "192.168.1.140 TCP/5555 open; MAC 02:51:52:53:54:55"
   },
   {
    "level": "worth-fixing",
@@ -237,7 +260,17 @@
     "Run Porchlight again to confirm it's off."
    ],
    "minutes": 5,
-   "ssid": "HomeNet-EXT"
+   "ssid": "HomeNet-EXT",
+   "id": "PL-WPS",
+   "severity": "medium",
+   "cis": [
+    "4.2",
+    "12.6"
+   ],
+   "refs": [
+    "CVE-2011-5053"
+   ],
+   "technical": "MAC 82:3a:7c:10:5e:21"
   },
   {
    "level": "worth-fixing",
@@ -254,7 +287,12 @@
     "Run Porchlight again later to see if it's still there."
    ],
    "minutes": 10,
-   "ssid": "HomeNet"
+   "ssid": "HomeNet",
+   "id": "PL-EVIL-TWIN",
+   "severity": "medium",
+   "cis": [],
+   "refs": [],
+   "technical": null
   },
   {
    "level": "good-to-know",
@@ -268,7 +306,14 @@
     "Open http://192.168.1.115/ in a browser.",
     "If it lets you in with no password or with \"admin\", set your own (12+ characters) in its System, Management or Admin settings."
    ],
-   "minutes": 3
+   "minutes": 3,
+   "id": "PL-DEFAULT-PASSWORD",
+   "severity": "low",
+   "cis": [
+    "4.7"
+   ],
+   "refs": [],
+   "technical": "MAC 82:3a:7c:10:5e:21"
   },
   {
    "level": "good-to-know",
@@ -282,7 +327,14 @@
     "Open http://192.168.1.120/ in a browser.",
     "If it lets you in with no password or with \"admin\", set your own (12+ characters) in its System, Management or Admin settings."
    ],
-   "minutes": 3
+   "minutes": 3,
+   "id": "PL-DEFAULT-PASSWORD",
+   "severity": "low",
+   "cis": [
+    "4.7"
+   ],
+   "refs": [],
+   "technical": "MAC 02:44:55:66:77:88"
   },
   {
    "level": "good-to-know",
@@ -297,7 +349,15 @@
     "If you don't recognise it, change your Wi-Fi password in your router's settings, then reconnect your own devices."
    ],
    "minutes": 5,
-   "isNew": true
+   "isNew": true,
+   "id": "PL-NEW-DEVICE",
+   "severity": "low",
+   "cis": [
+    "1.1",
+    "1.2"
+   ],
+   "refs": [],
+   "technical": "MAC 02:51:52:53:54:55"
   },
   {
    "level": "all-good",
@@ -308,7 +368,12 @@
    "means": "Programs and devices on your network can't open a way in from the internet without you setting it up. That's the safer setting.",
    "likely": "Nothing to do.",
    "fix": [],
-   "minutes": 0
+   "minutes": 0,
+   "id": "PL-UPNP-OFF",
+   "severity": "pass",
+   "cis": [],
+   "refs": [],
+   "technical": "MAC 02:10:20:30:40:01"
   },
   {
    "level": "all-good",
@@ -319,7 +384,12 @@
    "means": "That's the current standard. Its real strength is the password: 12+ characters that aren't a name or a date is what keeps it safe.",
    "likely": "Nothing to do. If your router offers WPA3, you can switch later.",
    "fix": [],
-   "minutes": 0
+   "minutes": 0,
+   "id": "PL-WIFI-OK",
+   "severity": "pass",
+   "cis": [],
+   "refs": [],
+   "technical": null
   },
   {
    "level": "all-good",
@@ -330,7 +400,12 @@
    "means": "Other devices on your network can only reach the programs on this computer that you've allowed.",
    "likely": "Nothing to do.",
    "fix": [],
-   "minutes": 0
+   "minutes": 0,
+   "id": "PL-FIREWALL-OK",
+   "severity": "pass",
+   "cis": [],
+   "refs": [],
+   "technical": null
   },
   {
    "level": "all-good",
@@ -341,7 +416,12 @@
    "means": "Porchlight checked again and these are gone. Nice work.",
    "likely": "Nothing to do.",
    "fix": [],
-   "minutes": 0
+   "minutes": 0,
+   "id": "PL-FIXED",
+   "severity": "pass",
+   "cis": [],
+   "refs": [],
+   "technical": null
   }
  ]
 }

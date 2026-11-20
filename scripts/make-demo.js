@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import { buildFindings, changeFindings, summarize, scoreOf, deviceName, deviceKind, ownNetworks, LEVELS } from "../src/findings.js";
 import { COMMON_PORTS } from "../src/ports.js";
+import { annotate } from "../src/catalog.js";
 
 const rsn = { rsn: { ciphers: ["CCMP"], akms: ["PSK"] }, wpa: null, privacy: true };
 const open = { rsn: null, wpa: null, privacy: false };
@@ -37,12 +38,15 @@ const changes = {
 
 const findings = buildFindings({ devices, upnp, routerAdmin: { reachable: true, https: true }, wifi, homeSsid: "HomeNet", firewall: { profiles: ["private"], on: true } });
 findings.push(...changeFindings(changes));
+annotate(findings, devices);
 findings.sort((a, b) => LEVELS.indexOf(a.level) - LEVELS.indexOf(b.level));
 
 const report = {
   demo: true,
   when: "2026-11-20T18:00:00.000Z",
   durationSec: 34,
+  profile: "home",
+  scope: ["192.168.1.0/24"],
   network: { cidr: "192.168.1.0/24", gateway: "192.168.1.1", address: "192.168.1.50", interface: "Wi-Fi", narrowed: false },
   homeSsid: "HomeNet",
   score: scoreOf(findings),

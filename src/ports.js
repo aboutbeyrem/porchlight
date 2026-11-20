@@ -3,7 +3,7 @@
 
 import net from "node:net";
 
-// port -> what it means in plain words
+// port -> what it means in plain words. `office: true` ports are only checked in the office profile.
 export const COMMON_PORTS = {
   21: { name: "FTP", plain: "old file transfer (no encryption)" },
   22: { name: "SSH", plain: "secure remote login" },
@@ -23,7 +23,32 @@ export const COMMON_PORTS = {
   8554: { name: "RTSP-alt", plain: "live video stream" },
   34567: { name: "XMEye", plain: "DVR/camera remote-viewing service" },
   37777: { name: "Dahua", plain: "Dahua camera/recorder service" },
+  // Office profile: servers and management.
+  389: { name: "LDAP", plain: "directory service (not encrypted)", office: true },
+  1433: { name: "MSSQL", plain: "SQL Server database", office: true },
+  3306: { name: "MySQL", plain: "MySQL / MariaDB database", office: true },
+  5432: { name: "PostgreSQL", plain: "PostgreSQL database", office: true },
+  5985: { name: "WinRM", plain: "Windows remote management (not encrypted)", office: true },
+  5984: { name: "CouchDB", plain: "CouchDB database", office: true },
+  6379: { name: "Redis", plain: "Redis database", office: true },
+  8443: { name: "HTTPS-alt", plain: "web page (encrypted, often admin pages)", office: true },
+  9100: { name: "JetDirect", plain: "raw printing", office: true },
+  9200: { name: "Elasticsearch", plain: "Elasticsearch search database", office: true },
+  11211: { name: "Memcached", plain: "Memcached cache", office: true },
+  27017: { name: "MongoDB", plain: "MongoDB database", office: true },
 };
+
+export const PROFILES = {
+  // Gentle: one door at a time, so small home devices keep working.
+  home: { ports: Object.keys(COMMON_PORTS).map(Number).filter((p) => !COMMON_PORTS[p].office), perHost: 1, timeoutMs: 1200 },
+  // Offices have sturdier devices and more of them: a few doors at a time, more doors.
+  office: { ports: Object.keys(COMMON_PORTS).map(Number), perHost: 4, timeoutMs: 1000 },
+};
+
+export function portsFor(profile = "home", extra = []) {
+  const base = (PROFILES[profile] || PROFILES.home).ports;
+  return [...new Set([...base, ...extra.filter((p) => Number.isInteger(p) && p > 0 && p < 65536)])].sort((a, b) => a - b);
+}
 
 export function checkPort(host, port, timeoutMs = 1200) {
   return new Promise((resolve) => {
@@ -54,10 +79,9 @@ export async function pool(items, limit, fn) {
   return results;
 }
 
-// One door at a time per device: small devices (extenders, cameras) drop every connection when several arrive at
-// once, which would both hide their open ports and disturb them. Different devices are checked in parallel.
-export async function scanPorts(host, ports = Object.keys(COMMON_PORTS).map(Number), check = checkPort) {
-  const open = [];
-  for (const p of ports) if (await check(host, p)) open.push(p);
-  return open;
+// Home profile: one door at a time per device. Small devices (extenders, cameras) drop every connection when
+// several arrive at once, which would both hide their open ports and disturb them. Devices run in parallel.
+export async function scanPorts(host, ports = PROFILES.home.ports, check = checkPort, { perHost = 1, timeoutMs = 1200 } = {}) {
+  const open = await pool(ports, perHost, async (p) => ((await check(host, p, timeoutMs)) ? p : null));
+  return open.filter((p) => p !== null).sort((a, b) => a - b);
 }
