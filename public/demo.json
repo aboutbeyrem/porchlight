@@ -1,0 +1,225 @@
+{
+ "demo": true,
+ "when": "2026-11-20T08:00:00.000Z",
+ "durationSec": 31,
+ "network": {
+  "cidr": "192.168.1.0/24",
+  "gateway": "192.168.1.1",
+  "address": "192.168.1.50",
+  "interface": "Ethernet",
+  "narrowed": false
+ },
+ "homeSsid": "HomeNet",
+ "devices": [
+  {
+   "ip": "192.168.1.1",
+   "name": "Your router (Home Router)",
+   "kind": "router",
+   "ports": [
+    21,
+    80,
+    443
+   ],
+   "doors": [
+    {
+     "port": 21,
+     "name": "FTP",
+     "plain": "old file transfer (no encryption)"
+    },
+    {
+     "port": 80,
+     "name": "HTTP",
+     "plain": "web page (not encrypted)"
+    },
+    {
+     "port": 443,
+     "name": "HTTPS",
+     "plain": "web page (encrypted)"
+    }
+   ],
+   "self": false,
+   "isRouter": true,
+   "web": null,
+   "broadcasts": []
+  },
+  {
+   "ip": "192.168.1.50",
+   "name": "This computer",
+   "kind": "this computer",
+   "ports": [],
+   "doors": [],
+   "self": true,
+   "isRouter": false,
+   "web": null,
+   "broadcasts": []
+  },
+  {
+   "ip": "192.168.1.115",
+   "name": "PIX-LINK (192.168.1.115)",
+   "kind": "Wi-Fi extender or access point",
+   "ports": [
+    80
+   ],
+   "doors": [
+    {
+     "port": 80,
+     "name": "HTTP",
+     "plain": "web page (not encrypted)"
+    }
+   ],
+   "self": false,
+   "isRouter": false,
+   "web": "http://192.168.1.115/",
+   "broadcasts": [
+    "HomeNet-EXT"
+   ]
+  },
+  {
+   "ip": "192.168.1.120",
+   "name": "IPC-Living-Room (192.168.1.120)",
+   "kind": "camera or recorder",
+   "ports": [
+    80,
+    554
+   ],
+   "doors": [
+    {
+     "port": 80,
+     "name": "HTTP",
+     "plain": "web page (not encrypted)"
+    },
+    {
+     "port": 554,
+     "name": "RTSP",
+     "plain": "live video stream"
+    }
+   ],
+   "self": false,
+   "isRouter": false,
+   "web": "http://192.168.1.120/",
+   "broadcasts": []
+  },
+  {
+   "ip": "192.168.1.131",
+   "name": "Galaxy-A52 (192.168.1.131)",
+   "kind": "phone or tablet",
+   "ports": [],
+   "doors": [],
+   "self": false,
+   "isRouter": false,
+   "web": null,
+   "broadcasts": []
+  }
+ ],
+ "summary": "3 worth fixing. Everything else looks fine.",
+ "findings": [
+  {
+   "level": "worth-fixing",
+   "device": "192.168.1.1",
+   "deviceName": "Your router (Home Router)",
+   "title": "Old file-sharing service (FTP) is on",
+   "found": "Your router runs an FTP server (Pure-FTPd). FTP is an old way of sharing files (usually a USB drive plugged into the router) that sends passwords and files unencrypted.",
+   "means": "Someone on your network could read the FTP password while it's being used, then open the shared files.",
+   "likely": "Low to moderate: it needs someone already on your network.",
+   "fix": [
+    "Open your router's settings page (http://192.168.1.1) and log in.",
+    "Look under USB, Storage or File sharing and turn FTP off.",
+    "If you do share a USB drive this way, keep it on but give it a strong password.",
+    "Run Porchlight again."
+   ],
+   "minutes": 5
+  },
+  {
+   "level": "worth-fixing",
+   "device": "192.168.1.120",
+   "deviceName": "IPC-Living-Room (192.168.1.120)",
+   "title": "Camera video can be watched without a password",
+   "found": "IPC-Living-Room (192.168.1.120) sends its live video to anyone who asks, without a password.",
+   "means": "Anyone connected to your Wi-Fi can open the video feed. No device has asked your router to open it to the internet (we checked); unless you set up a port forward for this camera yourself, people outside your home can't reach it.",
+   "likely": "Moderate: it needs someone on your Wi-Fi, like a guest, a neighbour who knows the password, or an infected device.",
+   "fix": [
+    "Open the camera's app or web page.",
+    "Go to Settings → Network or Security and turn on \"Authentication\" for RTSP (sometimes called \"RTSP password\" or \"Stream encryption\").",
+    "If you don't use the camera with other apps, turn RTSP off completely.",
+    "Run Porchlight again to confirm."
+   ],
+   "minutes": 5
+  },
+  {
+   "level": "worth-fixing",
+   "device": "192.168.1.115",
+   "deviceName": "PIX-LINK (192.168.1.115)",
+   "title": "WPS is on for \"HomeNet-EXT\"",
+   "found": "\"HomeNet-EXT\" (broadcast by your PIX-LINK extender at 192.168.1.115) announces WPS, the \"press a button or type an 8-digit PIN to connect\" feature. WPS is already off on \"HomeNet\".",
+   "means": "The PIN part of WPS has a known design weakness: on some devices, someone within Wi-Fi range can work out the PIN with free tools and get the Wi-Fi password, however long it is. The push-button part is fine.",
+   "likely": "Low to moderate: it needs someone within range of your Wi-Fi, and it only works on some models. Turning WPS off costs nothing unless you connect devices with the WPS button.",
+   "fix": [
+    "Open your PIX-LINK extender's settings page (http://192.168.1.115/) and log in.",
+    "Find WPS (usually under Wireless, Wi-Fi or WLAN) and turn it off, then save.",
+    "Run Porchlight again to confirm it's off."
+   ],
+   "minutes": 5
+  },
+  {
+   "level": "good-to-know",
+   "device": "192.168.1.115",
+   "deviceName": "PIX-LINK (192.168.1.115)",
+   "title": "Make sure the Wi-Fi extender has its own admin password",
+   "found": "PIX-LINK (192.168.1.115) has a settings page at http://192.168.1.115/.",
+   "means": "Anyone on your network can open that page. Porchlight never tries passwords, so it can't tell whether the factory password (often blank or \"admin\") is still set. Whoever knows it can change the device's settings.",
+   "likely": "Low, once you've set your own password.",
+   "fix": [
+    "Open http://192.168.1.115/ in a browser.",
+    "If it lets you in with no password or with \"admin\", set your own (12+ characters) in its System, Management or Admin settings."
+   ],
+   "minutes": 3
+  },
+  {
+   "level": "good-to-know",
+   "device": "192.168.1.120",
+   "deviceName": "IPC-Living-Room (192.168.1.120)",
+   "title": "Make sure the camera has its own admin password",
+   "found": "IPC-Living-Room (192.168.1.120) has a settings page at http://192.168.1.120/.",
+   "means": "Anyone on your network can open that page. Porchlight never tries passwords, so it can't tell whether the factory password (often blank or \"admin\") is still set. Whoever knows it can change the device's settings.",
+   "likely": "Low, once you've set your own password.",
+   "fix": [
+    "Open http://192.168.1.120/ in a browser.",
+    "If it lets you in with no password or with \"admin\", set your own (12+ characters) in its System, Management or Admin settings."
+   ],
+   "minutes": 3
+  },
+  {
+   "level": "good-to-know",
+   "device": null,
+   "deviceName": null,
+   "title": "Your ALFA Wi-Fi adapter can do monitor mode on Linux, not on Windows",
+   "found": "Realtek RTL8811AU Wireless LAN 802.11ac USB 2.0 Network Adapter uses a Realtek RTL8812AU/8811AU family chip. Its Windows driver reports monitor mode as not supported, so it's off here.",
+   "means": "The hardware can do it: monitor mode works on Linux with the rtl8812au driver. On Windows it works as a normal Wi-Fi card.",
+   "likely": "Nothing to worry about.",
+   "fix": [],
+   "minutes": 0
+  },
+  {
+   "level": "all-good",
+   "device": "192.168.1.1",
+   "deviceName": "Your router (Home Router)",
+   "title": "Devices can't open doors to the internet on their own",
+   "found": "Your router answered our UPnP check but doesn't offer automatic port opening (UPnP-IGD is off).",
+   "means": "Programs and devices on your network can't open a way in from the internet without you setting it up. That's the safer setting.",
+   "likely": "Nothing to do.",
+   "fix": [],
+   "minutes": 0
+  },
+  {
+   "level": "all-good",
+   "device": null,
+   "deviceName": null,
+   "title": "Your 2 Wi-Fi networks are well protected",
+   "found": "\"HomeNet\" uses WPA2. \"HomeNet-EXT\" (broadcast by your PIX-LINK extender at 192.168.1.115) uses WPA2.",
+   "means": "That's the current standard. Its real strength is the password: 12+ characters that aren't a name or a date is what keeps it safe.",
+   "likely": "Nothing to do. If your router offers WPA3, you can switch later.",
+   "fix": [],
+   "minutes": 0
+  }
+ ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "porchlight",
+  "version": "0.1.0",
+  "description": "A security checkup for your home network, explained in plain language. Looks, never breaks in.",
+  "type": "module",
+  "bin": { "porchlight": "bin/porchlight.js" },
+  "scripts": {
+    "start": "node bin/porchlight.js",
+    "scan": "node bin/porchlight.js --scan",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "author": "Beyrem Oueslati (https://www.aboutbeyrem.com)",
+  "repository": { "type": "git", "url": "https://github.com/aboutbeyrem/porchlight" },
+  "keywords": ["security", "home-network", "iot", "camera", "upnp", "wifi", "privacy"]
+}

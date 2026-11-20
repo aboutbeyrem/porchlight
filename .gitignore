@@ -1,0 +1,6 @@
+node_modules/
+*.log
+# Reports from real checkups describe a real home: keep them out of the repo.
+report*.json
+scan*.json
+.vercel/

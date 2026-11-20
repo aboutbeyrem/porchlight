@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Porchlight</title>
+  <link rel="stylesheet" href="panel.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='14' r='7' fill='%23f2b705'/%3E%3Crect x='12' y='22' width='8' height='5' rx='1' fill='%231b2a41'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="lamp" aria-hidden="true"></span> Porchlight</div>
+    <p class="tag">A security checkup for your home network. It looks; it never breaks in.</p>
+  </header>
+
+  <main>
+    <section id="consent" class="panel" hidden>
+      <h1>Is this your home network?</h1>
+      <p class="lead">Porchlight will look at the devices on the network this computer is connected to. It only reads what they show; it never logs into anything or changes any setting, and nothing leaves this computer.</p>
+      <dl class="facts">
+        <div><dt>Network</dt><dd id="c-net">…</dd></div>
+        <div><dt>Router</dt><dd id="c-router">…</dd></div>
+      </dl>
+      <label class="field" for="c-ssid">Your Wi-Fi name
+        <select id="c-ssid"></select>
+        <span class="hint">So Porchlight can check how it's protected. It never needs your Wi-Fi password.</span>
+      </label>
+      <label class="check"><input type="checkbox" id="c-ok"> Yes, this is my home network and I'm allowed to check it.</label>
+      <button id="c-start" class="primary" disabled>Start the checkup</button>
+    </section>
+
+    <section id="running" class="panel" hidden>
+      <h1>Checking your home…</h1>
+      <p class="lead" id="r-step">Starting</p>
+      <div class="bar" aria-hidden="true"><span></span></div>
+      <p class="hint">This usually takes one to two minutes. Porchlight knocks gently so your devices keep working normally.</p>
+    </section>
+
+    <section id="results" hidden>
+      <div class="summary panel">
+        <p id="demo-note" class="demo-note" hidden>Sample report of a made-up home. <a href="/">Check your own network</a></p>
+        <h1 id="s-sentence"></h1>
+        <p class="meta" id="s-meta"></p>
+        <div class="counts" id="s-counts"></div>
+        <div class="actions">
+          <button id="again" class="secondary">Check again</button>
+          <button id="pdf" class="secondary">Save as PDF</button>
+        </div>
+      </div>
+      <div id="list"></div>
+      <details class="panel devices">
+        <summary>Devices we found (<span id="d-count">0</span>)</summary>
+        <table><thead><tr><th>Device</th><th>Address</th><th>Open doors</th></tr></thead><tbody id="d-body"></tbody></table>
+      </details>
+    </section>
+
+    <section id="error" class="panel" hidden>
+      <h1>The checkup couldn't finish</h1>
+      <p class="lead" id="e-msg"></p>
+      <button id="e-retry" class="primary">Try again</button>
+    </section>
+  </main>
+
+  <footer>Porchlight checks only the network you're on, only with your permission, and never cracks, floods or breaks into anything.</footer>
+  <script src="panel.js"></script>
+</body>
+</html>
