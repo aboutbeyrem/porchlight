@@ -15,6 +15,7 @@ function el(tag, attrs = {}, ...children) {
   for (const [k, v] of Object.entries(attrs)) {
     if (v === null || v === undefined || v === false) continue;
     if (k === "class") n.className = v;
+    else if (k === "vars") for (const [name, val] of Object.entries(v)) n.style.setProperty(name, val); // CSSOM: allowed by the panel's CSP
     else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
     else n.setAttribute(k, v === true ? "" : v);
   }
@@ -48,6 +49,7 @@ async function start() {
   const profile = document.querySelector("input[name=profile]:checked")?.value || "home";
   const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ consent: true, homeSsid, profile }) });
   if (!r.ok && r.status !== 409) return fail((await r.json()).error);
+  document.querySelectorAll("#r-steps li").forEach((li) => li.classList.remove("done", "now"));
   show("running");
   poll();
 }
@@ -55,9 +57,23 @@ async function start() {
 async function poll() {
   const s = await fetch("/api/status").then((r) => r.json()).catch(() => null);
   if (!s) return setTimeout(poll, 1500);
-  if (s.status === "running") { $("r-step").textContent = s.progress + "…"; return setTimeout(poll, 1000); }
+  if (s.status === "running") { $("r-step").textContent = s.progress + "…"; markStep(s.progress); return setTimeout(poll, 1000); }
   if (s.status === "error") return fail(s.error);
   if (s.status === "done") render(s.report);
+}
+
+// The running screen ticks off each step as the checkup reaches the next one.
+const STEP_OF = [[/finding your network/i, "network"], [/looking for devices/i, "devices"], [/describe themselves/i, "describe"], [/open doors/i, "doors"], [/router|wi-fi/i, "wifi"]];
+function markStep(progress) {
+  const current = STEP_OF.find(([re]) => re.test(progress || ""))?.[1];
+  if (!current) return;
+  let passed = true;
+  for (const li of document.querySelectorAll("#r-steps li")) {
+    const isCurrent = li.dataset.step === current;
+    if (isCurrent) passed = false;
+    li.classList.toggle("done", passed);
+    li.classList.toggle("now", isCurrent);
+  }
 }
 
 function fail(msg) {
@@ -74,7 +90,13 @@ const smooth = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "
 function renderScore(score) {
   const value = score?.value ?? 100;
   const c = 2 * Math.PI * 52;
-  $("score-arc").style.strokeDasharray = `${(value / 100) * c} ${c}`;
+  // The ring fills from empty when results arrive (a once-per-checkup moment).
+  const arc = $("score-arc");
+  arc.style.transition = "none";
+  arc.style.strokeDasharray = `0 ${c}`;
+  void arc.getBoundingClientRect(); // commit the empty ring, then let it fill
+  arc.style.transition = "";
+  arc.style.strokeDasharray = `${(value / 100) * c} ${c}`;
   $("score").className = `score ${value >= 90 ? "s-good" : value >= 70 ? "s-ok" : "s-low"}`;
   $("score").setAttribute("aria-label", `Score ${value} out of 100`);
   $("score-value").textContent = value;
@@ -146,8 +168,8 @@ function renderMap() {
     el("span", { class: "chip-note" }, `${w.auth ? w.auth.replace(/-Personal/g, "") : "protection unknown"}${w.wps ? " · WPS on" : ""}`))));
   const rank = (d) => { const l = worstLevel(findingsFor(d.ip)); return l ? ORDER.indexOf(l) : ORDER.length; };
   const others = report.devices.filter((d) => !d.isRouter).sort((a, b) => b.self - a.self || rank(a) - rank(b));
-  $("map-devices").replaceChildren(...others.map((d) =>
-    el("li", {}, deviceNode(d, d.broadcasts?.length ? el("span", { class: "node-kind" }, `Broadcasts "${d.broadcasts.join('", "')}"`) : null))));
+  $("map-devices").replaceChildren(...others.map((d, i) =>
+    el("li", { vars: { "--n": Math.min(i, 8) } }, deviceNode(d, d.broadcasts?.length ? el("span", { class: "node-kind" }, `Broadcasts "${d.broadcasts.join('", "')}"`) : null))));
 }
 
 function techDetails(f) {
@@ -189,7 +211,11 @@ function renderList() {
   } else if (filter.level) {
     $("filter-text").textContent = `Showing "${LABEL[filter.level] || "Accepted"}" only.`;
   }
-  $("list").replaceChildren(...shown.map(findingCard));
+  $("list").replaceChildren(...shown.map((f, i) => {
+    const card = findingCard(f);
+    card.style.setProperty("--n", Math.min(i, 6));
+    return card;
+  }));
   renderCounts();
   renderMap();
 }
@@ -205,6 +231,13 @@ function render(rep) {
   $("s-meta").textContent = `Checked ${rep.devices.length} devices on ${(rep.scope || [rep.network.cidr]).join(", ")} on ${when}, in ${rep.durationSec} seconds${rep.profile === "office" ? " (office checks)" : ""}.${rep.homeSsid ? ` Wi-Fi: "${rep.homeSsid}".` : ""}${rep.authorization ? ` Authorised by ${rep.authorization.by}.` : ""}`;
   renderChanges(rep);
   renderList();
+  // Results appear once per checkup: let them arrive in order. Filtering afterwards is instant.
+  const res = $("results");
+  res.classList.remove("arrive");
+  void res.offsetWidth;
+  res.classList.add("arrive");
+  clearTimeout(render.settle);
+  render.settle = setTimeout(() => res.classList.remove("arrive"), 1400); // after this, filtering is instant
   $("d-count").textContent = rep.devices.length;
   const doors = (d) => (d.doors || []).length
     ? el("ul", { class: "doors" }, d.doors.map((x) => el("li", {}, x.plain, el("span", { class: "hint inline" }, ` ${x.name}, port ${x.port}`))))

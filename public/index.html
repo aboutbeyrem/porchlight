@@ -9,8 +9,8 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand"><span class="lamp" aria-hidden="true"></span> Porchlight</div>
-    <p class="tag">A security checkup for your home network. It looks; it never breaks in.</p>
+    <div class="brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10" /><path d="M12 3v3" /><path d="M8.5 6h7l1.5 6h-10z" /><circle cx="12" cy="15.5" r="2.2" class="bulb" /></svg> Porchlight</div>
+    <p class="tag">A security checkup for your network. It looks; it never breaks in.</p>
   </header>
 
   <main>
@@ -36,10 +36,17 @@
     </section>
 
     <section id="running" class="panel" hidden>
-      <h1>Checking your home…</h1>
-      <p class="lead" id="r-step">Starting</p>
+      <h1>Checking your network…</h1>
+      <p class="lead" id="r-step" aria-live="polite">Starting</p>
+      <ol class="run-steps" id="r-steps">
+        <li data-step="network">Finding your network</li>
+        <li data-step="devices">Looking for devices</li>
+        <li data-step="describe">Asking devices to describe themselves</li>
+        <li data-step="doors">Checking each device for open doors</li>
+        <li data-step="wifi">Looking at your router and Wi-Fi</li>
+      </ol>
       <div class="bar" aria-hidden="true"><span></span></div>
-      <p class="hint">This usually takes under a minute. Porchlight knocks gently, one door at a time, so your devices keep working normally.</p>
+      <p class="hint">This usually takes under a minute. Porchlight knocks gently, so your devices keep working normally.</p>
     </section>
 
     <section id="results" hidden>

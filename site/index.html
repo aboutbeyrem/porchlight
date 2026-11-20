@@ -4,19 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Porchlight: a home network security checkup in plain words</title>
-  <meta name="description" content="Porchlight finds the devices on your home network, checks for the problems that actually get homes into trouble, and explains each one in plain words with the fix. Free and open source, for Windows and Linux.">
-  <meta property="og:title" content="Porchlight: a home network security checkup in plain words">
-  <meta property="og:description" content="Finds what's on your home network and explains each problem in plain words, with the fix. It looks; it never breaks in.">
+  <meta name="description" content="Porchlight finds the devices on your home or office network, checks for the problems that actually matter, and explains each one in plain words with the fix. Free, open source, read-only. Windows and Linux.">
+  <meta property="og:title" content="Porchlight: turn the light on your home network">
+  <meta property="og:description" content="Finds what's on your network and explains each problem in plain words, with the fix. It looks; it never breaks in.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="panel-sample.png">
-  <meta name="theme-color" content="#1b2a41">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='14' r='7' fill='%23f2b705'/%3E%3Crect x='12' y='22' width='8' height='5' rx='1' fill='%231b2a41'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#0e1726">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='14' r='7' fill='%23f5b62a'/%3E%3Crect x='12' y='22' width='8' height='5' rx='1' fill='%230e1726'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="site.css">
+  <!-- Start in the dark only when motion is welcome; without this (or without JavaScript) everything is already lit. -->
+  <script>if (!matchMedia("(prefers-reduced-motion: reduce)").matches) { document.documentElement.classList.add("pl-intro"); setTimeout(function () { document.documentElement.classList.add("pl-on"); }, 3000); }</script>
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Porchlight",
-    "description": "A security checkup for your home network, written for people who aren't in IT. It finds the devices on your network, checks for common problems, and explains each one in plain words with the fix.",
+    "description": "A read-only security checkup for home and small-office networks. It finds the devices on your network, checks for common problems, and explains each one in plain words with the fix.",
     "applicationCategory": "SecurityApplication",
     "operatingSystem": "Windows, Linux",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -25,226 +28,192 @@
     "author": { "@type": "Person", "@id": "https://www.aboutbeyrem.com/#person", "name": "Beyrem Oueslati", "url": "https://www.aboutbeyrem.com" }
   }
   </script>
-  <style>
-    :root {
-      --night: #1b2a41; --night-2: #23344f; --on-night: #e9edf3; --on-night-2: #aab6c8;
-      --paper: #f4f6f9; --card: #ffffff; --ink: #1b2a41; --ink-2: #4a5568; --line: #dde2ea;
-      --lamp: #f2b705;
-      --soon: #b45309; --soon-bg: #fff4e5; --worth: #8a6d00; --worth-bg: #fffbe6;
-      --know: #3b5b7a; --know-bg: #eef3f8; --good: #2f7a4b; --good-bg: #ecf7f0;
-      --serif: ui-serif, "Iowan Old Style", Charter, "Sitka Text", Cambria, Georgia, serif;
-      --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
-    }
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-    body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 var(--sans); }
-    a { color: inherit; }
-    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 max(16px, 4vw); }
-    :focus-visible { outline: 3px solid var(--lamp); outline-offset: 3px; border-radius: 4px; }
-
-    /* The porch at night */
-    .night { overflow: hidden; background: radial-gradient(900px 520px at 78% 38%, rgba(242, 183, 5, 0.16), transparent 70%), var(--night); color: var(--on-night); }
-    nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
-    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; text-decoration: none; }
-    .lamp { width: 13px; height: 13px; border-radius: 50%; background: var(--lamp); box-shadow: 0 0 16px 2px rgba(242, 183, 5, 0.7); }
-    nav a.gh { font-weight: 600; font-size: 0.95rem; color: var(--on-night-2); text-decoration: none; }
-    nav a.gh:hover { color: var(--on-night); }
-    .hero { display: grid; grid-template-columns: 1.15fr 1fr; gap: 56px; align-items: center; padding: 40px 0 88px; }
-    h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 4.2vw, 3.05rem); line-height: 1.08; letter-spacing: -0.01em; margin: 0 0 22px; text-wrap: balance; }
-    .lead { font-size: 1.12rem; color: var(--on-night-2); max-width: 34em; margin: 0 0 30px; }
-    .lead strong { color: var(--on-night); font-weight: 600; }
-    .ctas { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-    .btn { display: inline-block; font-weight: 600; text-decoration: none; padding: 12px 20px; border-radius: 9px; }
-    .btn.primary { background: var(--lamp); color: var(--night); }
-    .btn.primary:hover { background: #ffc61a; }
-    .btn.ghost { color: var(--on-night); border: 1px solid rgba(233, 237, 243, 0.25); }
-    .btn.ghost:hover { border-color: rgba(233, 237, 243, 0.6); }
-    .fine { margin: 18px 0 0; font-size: 0.9rem; color: var(--on-night-2); }
-
-    /* The finding the lamp is shining on */
-    .lit { position: relative; }
-    .lit::before { content: ""; position: absolute; inset: -60px -40px; background: radial-gradient(closest-side, rgba(242, 183, 5, 0.28), transparent); opacity: 0; animation: on 900ms 250ms ease-out forwards; pointer-events: none; }
-    @keyframes on { to { opacity: 1; } }
-    @media (prefers-reduced-motion: reduce) { .lit::before { animation: none; opacity: 1; } }
-    .card { position: relative; background: var(--card); color: var(--ink); border-radius: 12px; border-left: 5px solid var(--worth); padding: 24px 26px; box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.55); }
-    .pill { display: inline-block; font-size: 0.82rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
-    .p-soon { color: var(--soon); background: var(--soon-bg); }
-    .p-worth { color: var(--worth); background: var(--worth-bg); }
-    .p-know { color: var(--know); background: var(--know-bg); }
-    .p-good { color: var(--good); background: var(--good-bg); }
-    .card h2 { font-size: 1.12rem; margin: 10px 0 2px; }
-    .card .dev { font-size: 0.88rem; color: var(--ink-2); margin: 0 0 12px; }
-    .card dl { margin: 0; display: grid; gap: 9px; font-size: 0.95rem; line-height: 1.5; }
-    .card dt { font-size: 0.76rem; font-weight: 700; color: var(--ink-2); }
-    .card dd { margin: 0; }
-    .card ol { margin: 2px 0 0; padding-left: 20px; }
-
-    /* Daylight */
-    section { padding: 84px 0 0; }
-    h2.title { font-family: var(--serif); font-weight: 600; font-size: clamp(1.6rem, 3vw, 2.15rem); line-height: 1.15; margin: 0 0 12px; text-wrap: balance; }
-    .intro { color: var(--ink-2); max-width: 40em; margin: 0 0 34px; }
-    .checks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 48px; margin: 0; }
-    .checks div { padding: 18px 0; border-top: 1px solid var(--line); }
-    .checks dt { font-weight: 700; margin-bottom: 4px; }
-    .checks dd { margin: 0; color: var(--ink-2); }
-    .anatomy { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 0 0 28px; padding: 0; list-style: none; }
-    .anatomy li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
-    .anatomy b { display: block; margin-bottom: 4px; }
-    .anatomy span { color: var(--ink-2); font-size: 0.95rem; }
-    .levels { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; color: var(--ink-2); font-size: 0.95rem; }
-    figure { margin: 40px 0 0; }
-    figure img { width: 100%; max-width: 720px; height: auto; display: block; border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 20px 50px -30px rgba(27, 42, 65, 0.6); }
-    figcaption { margin-top: 10px; font-size: 0.9rem; color: var(--ink-2); }
-    .never { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .never p { margin: 0; padding: 20px 22px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; color: var(--ink-2); }
-    .never strong { display: block; color: var(--ink); margin-bottom: 4px; }
-    .steps { margin: 0; padding-left: 22px; display: grid; gap: 16px; max-width: 46em; }
-    .steps li::marker { font-weight: 700; color: var(--ink-2); }
-    .steps li { min-width: 0; } /* lets the code box scroll instead of widening the page */
-    pre { margin: 8px 0 0; background: var(--night); color: var(--on-night); padding: 14px 16px; border-radius: 9px; overflow-x: auto; font: 0.9rem/1.5 var(--mono); }
-    code { font-family: var(--mono); font-size: 0.92em; }
-    .limits { max-width: 46em; color: var(--ink-2); padding-left: 20px; }
-    .limits li { margin-bottom: 6px; }
-    footer { margin-top: 96px; padding: 28px 0 40px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 0.92rem; }
-    footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
-
-    @media (max-width: 860px) {
-      .hero { grid-template-columns: 1fr; gap: 44px; padding-bottom: 64px; }
-      .anatomy { grid-template-columns: repeat(2, 1fr); }
-    }
-    @media (max-width: 600px) {
-      body { font-size: 16px; }
-      .checks, .never, .anatomy { grid-template-columns: 1fr; }
-      .card { padding: 20px; }
-      section { padding-top: 64px; }
-    }
-  </style>
+  <script src="site.js" defer></script>
 </head>
 <body>
-  <header class="night">
-    <div class="wrap">
-      <nav>
-        <a class="brand" href="#"><span class="lamp" aria-hidden="true"></span>Porchlight</a>
-        <a class="gh" href="https://github.com/aboutbeyrem/porchlight">Source on GitHub</a>
-      </nav>
-      <div class="hero">
-        <div>
-          <h1>A security checkup for your home Wi&#8209;Fi, written for people who aren't in IT.</h1>
-          <p class="lead">Porchlight finds the devices on your network and looks for the few problems that actually get homes into trouble: cameras anyone can watch, old services left on, WPS, weak Wi-Fi protection. Then it explains each one in plain words, with the fix. <strong>It looks; it never breaks in.</strong></p>
-          <div class="ctas">
-            <a class="btn primary" href="#run">Run it on your network</a>
-            <a class="btn ghost" href="#sample">See a sample report</a>
-          </div>
-          <p class="fine">Free and open source, for Windows and Linux. Nothing leaves your computer. Also has an office mode for IT teams.</p>
-        </div>
-        <div class="lit">
-          <article class="card" aria-label="Example finding">
-            <span class="pill p-worth">Worth fixing</span>
-            <h2>WPS is on for "HomeNet-EXT"</h2>
-            <p class="dev">Your PIX-LINK extender, 192.168.1.115</p>
-            <dl>
-              <div><dt>What we found</dt><dd>Your extender's network announces WPS, the "press a button or type an 8-digit PIN to connect" feature. It's already off on "HomeNet".</dd></div>
-              <div><dt>What that means</dt><dd>On some devices, someone within Wi-Fi range can work out the PIN and get your Wi-Fi password, however long it is.</dd></div>
-              <div><dt>How likely it matters</dt><dd>Low to moderate: it needs someone within range, and it only works on some models.</dd></div>
-              <div><dt>How to fix it (about 5 min)</dt><dd><ol><li>Open the extender's settings page and log in.</li><li>Find WPS and turn it off.</li><li>Run Porchlight again.</li></ol></dd></div>
-            </dl>
-          </article>
-        </div>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="night" id="top">
+    <nav class="wrap nav" aria-label="Main">
+      <a class="brand" href="#top" aria-label="Porchlight, back to top">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10" /><path d="M12 3v3" /><path d="M8.5 6h7l1.5 6h-10z" /><circle cx="12" cy="15.5" r="2.2" class="bulb" /></svg>
+        Porchlight
+      </a>
+      <div class="nav-links">
+        <a href="#how">How it works</a>
+        <a href="#office">For offices</a>
+        <a href="https://github.com/aboutbeyrem/porchlight">GitHub</a>
       </div>
+    </nav>
+
+    <div class="hero wrap" id="hero">
+      <div class="lamp" aria-hidden="true">
+        <span class="cone"></span>
+        <span class="spot"></span>
+        <svg class="fixture" viewBox="0 0 64 72"><path d="M18 6h28M32 6v8" /><path d="M21 14h22l5 24H16z" class="frame" /><ellipse cx="32" cy="30" rx="8" ry="9" class="glass" /></svg>
+      </div>
+
+      <h1 class="headline" data-split>Turn the light on your home network.</h1>
+      <p class="lead reveal-in" style="--d: 0">Porchlight finds every device on your Wi-Fi, checks for the few problems that actually matter, and explains each one in plain words, with the fix. <strong>It looks; it never breaks in.</strong></p>
+      <div class="ctas reveal-in" style="--d: 1">
+        <a class="btn primary" href="#run">Run it on your network</a>
+        <a class="btn ghost" href="#answers">See how it explains things</a>
+      </div>
+      <p class="fine reveal-in" style="--d: 2">Free and open source · Windows and Linux · nothing leaves your computer</p>
+
+      <ul class="yard" aria-label="Example: devices Porchlight found in a made-up home">
+        <li class="chip" style="--i: 0"><span class="dot good"></span><span><b>Home router</b><small>router</small></span></li>
+        <li class="chip" style="--i: 1"><span class="dot worth"></span><span><b>Living-room camera</b><small>camera · 1 to fix</small></span></li>
+        <li class="chip" style="--i: 2"><span class="dot good"></span><span><b>Sara's iPhone</b><small>phone</small></span></li>
+        <li class="chip" style="--i: 3"><span class="dot worth"></span><span><b>Living Room TV</b><small>TV · 1 to fix</small></span></li>
+        <li class="chip" style="--i: 4"><span class="dot worth"></span><span><b>PIX-LINK extender</b><small>extender · 1 to fix</small></span></li>
+      </ul>
+
+      <article class="found" aria-label="Example finding">
+        <div class="found-top"><span class="pill worth">Worth fixing</span><span class="found-id">PL-WPS</span></div>
+        <h2>WPS is on for "HomeNet-EXT"</h2>
+        <p>Your extender still offers the 8-digit PIN way to join. On some models, someone within range can work it out. Turning it off takes about five minutes.</p>
+      </article>
     </div>
   </header>
 
-  <main class="wrap">
-    <section id="checks" aria-labelledby="checks-title">
-      <h2 class="title" id="checks-title">What it checks</h2>
-      <p class="intro">Ten checks, chosen because they're the ones that matter in a real home, not because they're easy to automate.</p>
-      <dl class="checks">
-        <div><dt>Devices on your network</dt><dd>What's connected, named from what each device says about itself, like "Living Room TV" or "Sara's iPhone", and shown on a map of your home network.</dd></div>
-        <div><dt>Open doors</dt><dd>Eighteen common services, like Telnet, FTP, remote desktop, Android debugging on TV boxes, and camera recorder services.</dd></div>
-        <div><dt>Cameras</dt><dd>Whether a camera hands its live video to anyone who asks, without a password.</dd></div>
-        <div><dt>Doors opened to the internet</dt><dd>Whether a device asked your router to open a port to the internet without telling you.</dd></div>
-        <div><dt>Your Wi-Fi protection</dt><dd>WPA3, WPA2, or something older, for your main network, your extender and a second network from your router. Never your neighbours'.</dd></div>
-        <div><dt>WPS</dt><dd>Read from what your access points broadcast, so it works without logging into anything.</dd></div>
-        <div><dt>Router settings page</dt><dd>Whether your router's admin page offers an encrypted connection.</dd></div>
-        <div><dt>Fake copies of your Wi-Fi</dt><dd>Whether someone nearby broadcasts your Wi-Fi's name from an access point that isn't yours, especially one with no password.</dd></div>
-        <div><dt>New devices and fixes</dt><dd>It remembers, on your computer only, what it saw last time, and tells you when a new device joins or something you fixed is really gone.</dd></div>
-        <div><dt>Monitor mode</dt><dd>Whether you have a Wi-Fi adapter that can listen to all traffic nearby, and whether it's doing that right now.</dd></div>
-        <div><dt>This computer's firewall</dt><dd>Whether Windows Firewall is on for the network you're using.</dd></div>
-      </dl>
+  <main id="main">
+    <section class="day-start" id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <h2 class="title reveal" id="how-title">How a checkup goes</h2>
+        <p class="intro reveal">About thirty seconds for a typical home. You watch it happen on one calm screen.</p>
+        <ol class="steps">
+          <li class="reveal"><span class="n">1</span><div><h3>You confirm it's your network</h3><p>Porchlight only checks the network this computer is on, after you say it's yours. Office ranges need the name of whoever authorised it.</p></div></li>
+          <li class="reveal"><span class="n">2</span><div><h3>It finds every device and names it</h3><p>"Living Room TV", "Sara's iPhone", "PIX-LINK extender": names come from what each device announces about itself, not from guesses.</p></div></li>
+          <li class="reveal"><span class="n">3</span><div><h3>It knocks on common doors, gently</h3><p>Eighteen services that cause real trouble, like Telnet, FTP, camera streams and Android debugging. One door at a time, so small devices keep working.</p></div></li>
+          <li class="reveal"><span class="n">4</span><div><h3>It listens to your Wi-Fi</h3><p>Protection, WPS, and fake copies of your network's name, read from what your access points already broadcast. No special adapter needed.</p></div></li>
+          <li class="reveal"><span class="n">5</span><div><h3>It tells you what it found, in plain words</h3><p>A score out of 100, a map of your network, and every problem with the fix. Nothing in capitals, nothing in red.</p></div></li>
+          <li class="reveal"><span class="n">6</span><div><h3>Next time, it tells you what changed</h3><p>A new device joined? Something you fixed is really gone? Porchlight remembers, on your computer only.</p></div></li>
+        </ol>
+      </div>
     </section>
 
-    <section id="sample" aria-labelledby="sample-title">
-      <h2 class="title" id="sample-title">Four answers for every problem</h2>
-      <p class="intro">No jargon walls, no red alarms. Every finding answers the same four questions, and its level is honest about how much it matters.</p>
-      <ul class="anatomy">
-        <li><b>What we found</b><span>The fact, about a device you can recognise.</span></li>
-        <li><b>What that means</b><span>Who could do what because of it.</span></li>
-        <li><b>How likely it matters</b><span>What someone would need first, so you can judge.</span></li>
-        <li><b>How to fix it</b><span>Steps you can follow, and how long they take.</span></li>
-      </ul>
-      <p class="levels"><span class="pill p-soon">Fix soon</span><span class="pill p-worth">Worth fixing</span><span class="pill p-know">Good to know</span><span class="pill p-good">All good</span></p>
-      <figure>
-        <img src="panel-sample.png" width="860" height="1240" loading="lazy" alt="A sample Porchlight report of a made-up home: a score of 60 out of 100, one new device and one fix since last week, and a map of the network with each device coloured by what was found on it.">
-        <figcaption>A sample report of a made-up home: the score, what changed since last week, and a map of the network. Tap a device to see what was found on it.</figcaption>
-      </figure>
+    <section id="answers" aria-labelledby="answers-title">
+      <div class="wrap anatomy">
+        <div>
+          <h2 class="title reveal" id="answers-title">Four answers for every problem</h2>
+          <p class="intro reveal">Every finding answers the same four questions, and its level is honest about how much it matters. Point at a question to see it in the example.</p>
+          <ul class="parts" role="list">
+            <li class="reveal"><button type="button" data-part="found"><b>What we found</b><span>The fact, about a device you can recognise.</span></button></li>
+            <li class="reveal"><button type="button" data-part="means"><b>What that means</b><span>Who could do what because of it.</span></button></li>
+            <li class="reveal"><button type="button" data-part="likely"><b>How likely it matters</b><span>What someone would need first, so you can judge.</span></button></li>
+            <li class="reveal"><button type="button" data-part="fix"><b>How to fix it</b><span>Steps you can follow, and how long they take.</span></button></li>
+          </ul>
+          <p class="levels reveal"><span class="pill soon">Fix soon</span><span class="pill worth">Worth fixing</span><span class="pill know">Good to know</span><span class="pill good">All good</span></p>
+        </div>
+        <article class="card-demo reveal" aria-label="Example finding, explained">
+          <div class="found-top"><span class="pill worth">Worth fixing</span><span class="found-id">PL-RTSP-OPEN</span></div>
+          <h3>Camera video can be watched without a password</h3>
+          <p class="dev">IPC-Living-Room (192.168.1.120)</p>
+          <dl>
+            <div data-part="found"><dt>What we found</dt><dd>The camera sends its live video to anyone who asks, without a password.</dd></div>
+            <div data-part="means"><dt>What that means</dt><dd>Anyone connected to your Wi-Fi can open the video feed. No device asked your router to open it to the internet (we checked).</dd></div>
+            <div data-part="likely"><dt>How likely it matters</dt><dd>Moderate: it needs someone on your Wi-Fi, like a guest or a neighbour who knows the password.</dd></div>
+            <div data-part="fix"><dt>How to fix it (about 5 min)</dt><dd><ol><li>Open the camera's app or web page.</li><li>Turn on "Authentication" for RTSP.</li><li>Run Porchlight again to confirm.</li></ol></dd></div>
+          </dl>
+        </article>
+      </div>
     </section>
 
-    <section id="office" aria-labelledby="office-title">
-      <h2 class="title" id="office-title">For small offices</h2>
-      <p class="intro">The office profile adds the checks an IT team needs, and every finding carries a stable ID, a severity, what was observed, and the related CIS Controls v8 safeguards.</p>
-      <dl class="checks">
-        <div><dt>Windows and servers</dt><dd>SMBv1 still on, SMB signing not required, Remote Desktop without Network Level Authentication.</dd></div>
-        <div><dt>Encryption</dt><dd>Old TLS versions, expired or expiring certificates, self-signed certificates and weak keys.</dd></div>
-        <div><dt>Databases</dt><dd>Redis and Elasticsearch that answer without a password, and databases reachable from the whole network.</dd></div>
-        <div><dt>Inventory</dt><dd>A policy file lists known devices; anything else is flagged, so equipment nobody approved gets noticed.</dd></div>
-        <div><dt>Accepted risks</dt><dd>Reviewed findings stay in the report with who accepted them, why, and until when, and stop counting against the score.</dd></div>
-        <div><dt>Reports and automation</dt><dd>A self-contained HTML report for managers, CSV for tickets, and exit codes so a weekly scheduled run can raise an alarm.</dd></div>
-      </dl>
-      <p class="intro">Other ranges must be private addresses and need the name of whoever authorised the check, which goes into every report. Porchlight is a first-line checkup, not a certified compliance scanner or a penetration test.</p>
+    <section aria-labelledby="panel-title">
+      <div class="wrap">
+        <h2 class="title reveal" id="panel-title">Your whole network on one page</h2>
+        <p class="intro reveal">The score, what changed since last time, and a map of your network. Tap a device to see only what was found on it.</p>
+        <figure class="shot reveal-wipe">
+          <img src="panel-sample.png" width="860" height="1240" loading="lazy" decoding="async" alt="A Porchlight report of a made-up home: a score of 60 out of 100, one new device and one fix since last week, and a map of the network with each device coloured by what was found on it.">
+          <figcaption>A sample report of a made-up home. Run <code>node bin/porchlight.js</code> and open <code>localhost:7377/?demo</code> to try it.</figcaption>
+        </figure>
+      </div>
     </section>
 
-    <section id="never" aria-labelledby="never-title">
-      <h2 class="title" id="never-title">What it never does</h2>
-      <p class="intro">A checkup tool has to be safe to run on the network your family uses every day.</p>
-      <div class="never">
-        <p><strong>Only your network.</strong>It checks the network this computer is on, and only after you confirm it's yours.</p>
-        <p><strong>Never logs in.</strong>No password guessing, no factory-password tries, no cracking. It reads what devices already show.</p>
-        <p><strong>Never disturbs anything.</strong>No flooding, no disconnecting devices, no jamming. It knocks on one door at a time, so small devices keep working.</p>
-        <p><strong>Nothing leaves your computer.</strong>No account, no cloud, no tracking. Your report stays on your machine.</p>
+    <section class="dusk" id="office" aria-labelledby="office-title">
+      <div class="wrap office">
+        <div>
+          <h2 class="title reveal" id="office-title">For small offices and IT teams</h2>
+          <p class="intro reveal">The same calm explanations, plus what an IT team needs to track the work. Every finding carries a stable ID, a severity, what was observed, and the related CIS Controls v8 safeguards.</p>
+          <dl class="office-list">
+            <div class="reveal"><dt>Windows and servers</dt><dd>SMBv1 still on, file sharing that doesn't require signing, Remote Desktop without Network Level Authentication.</dd></div>
+            <div class="reveal"><dt>Encryption</dt><dd>Old TLS versions, expired or expiring certificates, self-signed certificates, weak keys.</dd></div>
+            <div class="reveal"><dt>Databases</dt><dd>Redis and Elasticsearch answering without a password; databases reachable from the whole network.</dd></div>
+            <div class="reveal"><dt>Inventory and accepted risks</dt><dd>A policy file lists known devices and reviewed risks, with who accepted them and until when.</dd></div>
+          </dl>
+        </div>
+        <div class="term reveal" role="group" aria-label="Example: a scheduled office checkup in the terminal">
+          <div class="term-bar"><span></span><span></span><span></span></div>
+<pre><code><span class="prompt">$</span> porchlight --scan --policy office.json \
+    --out report.html --out findings.csv
+
+<span class="muted">Authorised by: Jane Doe, IT manager</span>
+Score: 72/100 (A few things to tidy up)
+
+<span class="t-med">[Medium]</span> SMB signing not required    PL-SMB-SIGNING
+<span class="t-med">[Medium]</span> TLS 1.0 still accepted        PL-TLS-OLD
+<span class="t-low">[Low]</span>    Self-signed certificate       PL-CERT-SELFSIGNED
+<span class="muted">[Accepted until 2027-06-30] FTP on the NAS</span>
+
+<span class="muted">Wrote report.html, findings.csv</span>
+<span class="prompt">exit 1</span> <span class="muted"># a finding at or above failOn</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="never-title">
+      <div class="wrap">
+        <h2 class="title reveal" id="never-title">What it never does</h2>
+        <p class="intro reveal">A checkup has to be safe to run on the network your family uses every day.</p>
+        <ul class="never" role="list">
+          <li class="reveal"><b>It never logs in.</b><span>No password guessing, no factory-password tries, no cracking. It reads what devices already show.</span></li>
+          <li class="reveal"><b>It never attacks.</b><span>No flooding, no disconnecting devices, no exploits. It knocks on one door at a time.</span></li>
+          <li class="reveal"><b>It only checks networks you're allowed to check.</b><span>Your own by default. Other ranges must be private addresses, with the authoriser's name in every report.</span></li>
+          <li class="reveal"><b>Nothing leaves your computer.</b><span>No account, no cloud, no tracking. Your report stays on your machine.</span></li>
+        </ul>
       </div>
     </section>
 
     <section id="run" aria-labelledby="run-title">
-      <h2 class="title" id="run-title">Run it on your network</h2>
-      <p class="intro">It takes about thirty seconds for a typical home.</p>
-      <ol class="steps">
-        <li>Install <a href="https://nodejs.org">Node.js</a> 20 or newer. Nothing else is needed: Porchlight uses tools Windows and Linux already have.</li>
-        <li>Download Porchlight and start it.
-          <pre><code>git clone https://github.com/aboutbeyrem/porchlight
+      <div class="wrap">
+        <h2 class="title reveal" id="run-title">Run it on your network</h2>
+        <ol class="run">
+          <li class="reveal">Install <a href="https://nodejs.org">Node.js</a> 20 or newer. Nothing else: Porchlight uses tools Windows and Linux already have.</li>
+          <li class="reveal">Download Porchlight and start it.
+            <div class="code">
+              <pre><code id="install">git clone https://github.com/aboutbeyrem/porchlight
 cd porchlight
 node bin/porchlight.js</code></pre>
-        </li>
-        <li>Open <code>http://localhost:7377</code>, confirm it's your home network, pick your Wi-Fi name, and start the checkup.</li>
-      </ol>
+              <button class="copy" type="button" data-copy="install" aria-label="Copy the commands">
+                <svg class="i-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                <svg class="i-done" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                <span class="copy-label">Copy</span>
+              </button>
+            </div>
+          </li>
+          <li class="reveal">Open <code>http://localhost:7377</code>, confirm it's your network, pick your Wi-Fi name, choose Home or Office, and start the checkup.</li>
+        </ol>
+      </div>
     </section>
 
     <section id="limits" aria-labelledby="limits-title">
-      <h2 class="title" id="limits-title">What it can't tell you (yet)</h2>
-      <ul class="limits">
-        <li>It checks eighteen common services, not every port. It's a checkup, not a full audit.</li>
-        <li>It never tries passwords, so it reminds you to change factory passwords rather than testing them.</li>
-        <li>Sleeping phones and devices that ignore everything may not show up.</li>
-        <li>It can't see port forwards you set up by hand in your router, only ones devices opened themselves.</li>
-        <li>Spotting disconnection (deauthentication) attacks with a monitor-mode adapter is planned, not built.</li>
-      </ul>
-      <p class="intro">The full list is in the <a href="https://github.com/aboutbeyrem/porchlight#honest-limits">README</a>.</p>
+      <div class="wrap">
+        <h2 class="title reveal" id="limits-title">What it can't tell you (yet)</h2>
+        <ul class="limits">
+          <li>It's a first-line checkup, not a certified compliance scanner or a penetration test.</li>
+          <li>It checks common services (18 at home, 31 in an office), not every port.</li>
+          <li>It never tries passwords, so it reminds you to change factory passwords rather than testing them.</li>
+          <li>Sleeping phones and devices that ignore everything may not show up.</li>
+          <li>It can't see port forwards you set up by hand in your router, only ones devices opened themselves.</li>
+        </ul>
+        <p class="intro">The full list is in the <a href="https://github.com/aboutbeyrem/porchlight#honest-limits">README</a>.</p>
+      </div>
     </section>
   </main>
 
   <footer>
-    <div class="wrap">
+    <div class="wrap foot">
       <span>Porchlight is made by <a href="https://www.aboutbeyrem.com">Beyrem Oueslati</a>.</span>
       <span>Open source under the MIT license.</span>
     </div>

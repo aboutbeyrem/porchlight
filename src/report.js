@@ -3,7 +3,7 @@
 import { SEVERITY } from "./catalog.js";
 import { LEVEL_LABEL } from "./findings.js";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const SEV_LABEL = { critical: "Critical", high: "High", medium: "Medium", low: "Low", info: "Info", pass: "Pass" };
 const bySeverity = (a, b) => SEVERITY[a.severity] - SEVERITY[b.severity];

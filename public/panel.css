@@ -17,6 +17,8 @@ body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.55 v
 main { max-width: 760px; margin: 0 auto; padding: 0 max(16px, 4vw) 48px; display: grid; gap: 16px; }
 .top { max-width: 760px; margin: 0 auto; padding: 28px max(16px, 4vw) 12px; }
 .brand { font-weight: 700; font-size: 1.25rem; display: flex; align-items: center; gap: 10px; }
+.mark { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.mark .bulb { fill: var(--lamp); stroke: none; filter: drop-shadow(0 0 5px rgba(242, 183, 5, 0.85)); }
 .lamp { width: 14px; height: 14px; border-radius: 50%; background: var(--lamp); box-shadow: 0 0 18px var(--lamp); }
 .tag { margin: 4px 0 0; color: var(--ink-2); }
 .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px; }
@@ -146,4 +148,34 @@ footer { max-width: 760px; margin: 0 auto; padding: 0 max(16px, 4vw) 32px; color
   .panel { border: 1px solid #ccc; break-inside: avoid; }
   details.devices { display: block; }
   details.devices > * { display: revert; }
+}
+
+/* ---------- Motion: one curve, used sparingly ---------- */
+:root { --ease: cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Running: the steps tick off as the checkup reaches them */
+.run-steps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; }
+.run-steps li { position: relative; padding-left: 28px; color: var(--ink-2); transition: color 200ms var(--ease); }
+.run-steps li::before { content: ""; position: absolute; left: 4px; top: 7px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); transition: border-color 200ms var(--ease), background-color 200ms var(--ease); }
+.run-steps li.now { color: var(--ink); font-weight: 600; }
+.run-steps li.now::before { border-color: var(--lamp); background: color-mix(in srgb, var(--lamp) 30%, transparent); }
+.run-steps li.done { color: var(--ink); }
+.run-steps li.done::before { border-color: var(--good); background: var(--good); }
+.run-steps li.done::after { content: ""; position: absolute; left: 8px; top: 10px; width: 5px; height: 3px; border-left: 2px solid var(--card); border-bottom: 2px solid var(--card); transform: rotate(-45deg); }
+
+/* Results arrive once: summary, then the map, then the findings (opacity + a short rise + blur clearing) */
+@keyframes arrive { from { opacity: 0; transform: translateY(10px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+.arrive .summary { animation: arrive 480ms var(--ease) both; }
+.arrive .map { animation: arrive 480ms var(--ease) 90ms both; }
+.arrive .map-devices li { animation: arrive 380ms var(--ease) both; animation-delay: calc(180ms + var(--n, 0) * 35ms); }
+.arrive #list > article { animation: arrive 420ms var(--ease) both; animation-delay: calc(260ms + var(--n, 0) * 40ms); }
+
+/* Small, quick feedback on things you press */
+button, .node { transition: transform 90ms var(--ease), border-color 90ms linear, box-shadow 90ms linear, background-color 90ms linear; }
+button:active, .node:active { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  .arrive .summary, .arrive .map, .arrive .map-devices li, .arrive #list > article { animation: none; }
+  .run-steps li, .run-steps li::before, button, .node { transition: none; }
+  button:active, .node:active { transform: none; }
 }
