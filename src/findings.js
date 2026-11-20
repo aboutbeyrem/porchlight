@@ -3,6 +3,7 @@
 // risk is described as "who would need to do what", never as a worst-case story.
 import { COMMON_PORTS } from "./ports.js";
 import { protectionLevel, sameHardware, sameRouter, beaconProtection, isAlfa } from "./wifi.js";
+import { isPrivateMac } from "./mdns.js";
 
 export const LEVELS = ["fix-soon", "worth-fixing", "good-to-know", "all-good"];
 export const LEVEL_LABEL = { "fix-soon": "Fix soon", "worth-fixing": "Worth fixing", "good-to-know": "Good to know", "all-good": "All good" };
@@ -11,31 +12,54 @@ const CAMERA_PORTS = [554, 8554, 34567, 37777];
 
 export const EXTENDER = "Wi-Fi extender or access point";
 export const CAMERA = "camera or recorder";
+export const PRIVATE = "phone, tablet or laptop";
+export const BEHIND = "device on your Wi-Fi extender";
+
+// Makers whose name alone says what the device is.
+function kindFromVendor(v = "") {
+  if (/hikvision|dahua|reolink|ezviz|uniview|hanwha|axis comm|imou|wyze/i.test(v)) return CAMERA;
+  if (/espressif|tuya|shelly|sonoff|itead|lifx|signify|philips lighting/i.test(v)) return "smart-home device";
+  if (/raspberry/i.test(v)) return "computer";
+  if (/^apple/i.test(v)) return "Apple device";
+  return null;
+}
 
 export function deviceKind(d) {
-  const text = `${d.friendlyName || ""} ${d.manufacturer || ""} ${d.modelName || ""} ${d.hostname || ""} ${d.web?.title || ""}`.toLowerCase();
+  const text = `${d.friendlyName || ""} ${d.manufacturer || ""} ${d.modelName || ""} ${d.hostname || ""} ${d.web?.title || ""} ${d.mdns?.name || ""} ${d.mdns?.model || ""} ${d.mdns?.host || ""} ${d.netbios?.name || ""}`.toLowerCase();
   if (d.isRouter) return "router";
   if (d.self) return "this computer";
-  if (/camera|ipc|nvr|dvr|hikvision|dahua|reolink|ezviz|imou|tapo c|xiongmai|netcam/.test(text) || d.ports?.some((p) => CAMERA_PORTS.includes(p))) return CAMERA;
+  const vendorKind = kindFromVendor(d.vendor);
+  if (/camera|ipc|nvr|dvr|hikvision|dahua|reolink|ezviz|imou|tapo c|xiongmai|netcam/.test(text) || vendorKind === CAMERA || d.ports?.some((p) => CAMERA_PORTS.includes(p))) return CAMERA;
   if (d.broadcasts?.length || /pix-?link|repeater|extender|range ?ext|mesh wi-?fi|access point/.test(text)) return EXTENDER;
-  if (/tv|bravia|roku|chromecast|fire ?tv|android ?tv|webos|tizen/.test(text)) return "TV or streaming device";
+  if (d.mdns?.kind && d.mdns.kind !== "Apple device") return d.mdns.kind;
+  if (d.behind) return BEHIND;
+  if (/\btv\b|bravia|roku|chromecast|fire ?tv|android ?tv|webos|tizen/.test(text)) return "TV or streaming device";
   if (/printer|epson|canon|brother|hp ?(deskjet|laserjet|officejet)/.test(text)) return "printer";
-  if (/iphone|ipad|android|galaxy|redmi|xiaomi|oppo|huawei|pixel|phone/.test(text)) return "phone or tablet";
-  if (d.ports?.includes(3389) || d.ports?.includes(445)) return "computer";
+  if (/iphone|ipad|android|galaxy|redmi|oppo|pixel|phone/.test(text)) return "phone or tablet";
+  if (vendorKind && vendorKind !== "Apple device") return vendorKind;
+  if (d.mdns?.kind === "Apple device" || vendorKind === "Apple device") return "Apple phone, tablet or computer";
+  if (d.netbios || d.ports?.includes(3389) || d.ports?.includes(445)) return "computer";
+  if (isPrivateMac(d.mac)) return PRIVATE;
   return "device";
 }
 
 export function deviceName(d) {
   if (d.self) return "This computer";
   if (d.isRouter) return d.friendlyName ? `Your router (${d.friendlyName})` : "Your router";
-  const label = d.friendlyName || d.web?.label || d.hostname?.replace(/\.(lan|home|local|localdomain)$/i, "");
-  return label ? `${label} (${d.ip})` : `${capitalize(deviceKind(d))} at ${d.ip}`;
+  const clean = (s) => s?.replace(/\.(lan|home|local|localdomain)$/i, "");
+  const label = d.friendlyName || d.mdns?.name || d.web?.label || d.netbios?.name || clean(d.hostname) || clean(d.mdns?.host);
+  if (label) return `${label} (${d.ip})`;
+  const kind = deviceKind(d);
+  if (d.vendor) return kind === "device" ? `${d.vendor} device at ${d.ip}` : `${capitalize(kind)} (${d.vendor}) at ${d.ip}`;
+  return `${capitalize(kind)} at ${d.ip}`;
 }
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function finding(level, device, title, found, means, likely, fix, minutes) {
   return { level, device: device?.ip || null, deviceName: device ? deviceName(device) : null, title, found, means, likely, fix, minutes };
 }
+
+const withSsid = (ssid, ...args) => ({ ...finding(...args), ssid });
 
 function forwardedTo(mappings, ip, port) {
   return mappings.find((m) => m.enabled && m.internalClient === ip && (port === undefined || m.internalPort === port));
@@ -44,17 +68,47 @@ function forwardedTo(mappings, ip, port) {
 // Which of the Wi-Fi networks this computer can hear are yours: the one you named (or are connected to), a second
 // name from the same router (guest, 5 GHz), one whose name extends yours ("HomeNet-EXT"), or one broadcast
 // by a device we found on your network (an extender). Neighbours' networks are never reported on.
+// Several access points can use your Wi-Fi's name: your router's radios, a mesh or extender, or a copy run by
+// someone else. Group them by hardware and decide which group is really yours: the one this computer is connected
+// to, or one that belongs to a device on your network, or else the best-protected one. A copy never gets to decide.
+const normSsid = (s = "") => s.normalize("NFKC").replace(/[\s\u200b-\u200d\ufeff]/g, "").toLowerCase();
+const STRENGTH = { open: 0, wep: 1, wpa: 2, "wpa2-tkip": 3, wpa2: 4, "wpa2-wpa3": 5, wpa3: 5, unknown: -1 };
+const apLevel = (a) => { const p = beaconProtection(a.security); return protectionLevel(p?.auth, p?.cipher); };
+
+export function homeAccessPoints({ wifi, home, devices = [] }) {
+  const connected = wifi?.adapters?.find((a) => a.connected);
+  const same = (wifi?.aps || []).filter((a) => a.ssid && normSsid(a.ssid) === normSsid(home || ""));
+  const clusters = [];
+  for (const ap of same) {
+    const c = clusters.find((cl) => cl.some((x) => x.bssid === ap.bssid || sameRouter(x.bssid, ap.bssid)));
+    c ? c.push(ap) : clusters.push([ap]);
+  }
+  const isConnected = (cl) => cl.some((a) => a.bssid === connected?.bssid);
+  const tied = (cl) => isConnected(cl) || cl.some((a) => devices.some((d) => d.mac && !d.self && !d.behind && sameHardware(d.mac, a.bssid)));
+  const real = clusters.filter(tied);
+  // When this computer isn't connected over Wi-Fi, your router's own radios usually can't be tied to anything we
+  // see, so the best-protected group with your exact name is taken as your router. A copy only wins that if it's
+  // at least as well protected, and then it's reported as "another access point", never as a problem with yours.
+  if (!clusters.some(isConnected)) {
+    const strength = (cl) => Math.max(...cl.map((a) => STRENGTH[apLevel(a)] ?? -1));
+    const best = clusters.filter((cl) => !real.includes(cl) && cl.some((a) => a.ssid === home)).sort((a, b) => strength(b) - strength(a) || b.length - a.length)[0];
+    if (best) real.push(best);
+  }
+  return { clusters, real };
+}
+
 export function ownNetworks({ wifi, homeSsid, devices = [] }) {
   const connected = wifi?.adapters?.find((a) => a.connected);
   const home = connected?.ssid || homeSsid || null;
   const aps = wifi?.aps || [];
   const nets = wifi?.networks || [];
   const names = new Set([...nets.map((n) => n.ssid), ...aps.map((a) => a.ssid), connected?.ssid].filter(Boolean));
-  const homeBssids = aps.filter((a) => a.ssid === home).map((a) => a.bssid);
+  const realHome = homeAccessPoints({ wifi, home, devices }).real.flat();
+  const homeBssids = realHome.map((a) => a.bssid);
   const out = [];
   for (const ssid of names) {
-    const its = aps.filter((a) => a.ssid === ssid);
-    const device = devices.find((d) => !d.self && !d.isRouter && d.mac && its.some((a) => sameHardware(d.mac, a.bssid)));
+    const its = ssid === home ? realHome.filter((a) => a.ssid === home) : aps.filter((a) => a.ssid === ssid);
+    const device = devices.find((d) => !d.self && !d.isRouter && !d.behind && d.mac && its.some((a) => sameHardware(d.mac, a.bssid)));
     let reason = null;
     if (ssid === home) reason = "home";
     else if (device) reason = "device";
@@ -101,7 +155,7 @@ export function wifiFindings({ wifi, homeSsid, devices = [] }) {
       wpa: ["worth-fixing", `Your Wi-Fi ${ssid} uses old WPA protection`, "The original WPA has known weaknesses and is no longer considered safe.", "Moderate: it needs someone within Wi-Fi range.", [settingsOf(net), "Wi-Fi → Security: choose WPA2-Personal (AES) or WPA3.", "Reconnect your devices."]],
       "wpa2-tkip": ["worth-fixing", `Your Wi-Fi ${ssid} uses WPA2 with the old TKIP cipher`, "TKIP is outdated and slower; AES is the safe choice.", "Low to moderate.", [settingsOf(net), "Wi-Fi → Security: set encryption to AES (CCMP) only."]],
     }[level];
-    if (fix) out.push(finding(fix[0], net.device, fix[1], `${fix[1]}${where(net)}.`, fix[2], fix[3], fix[4], 10));
+    if (fix) out.push({ ...finding(fix[0], net.device, fix[1], `${fix[1]}${where(net)}.`, fix[2], fix[3], fix[4], 10), ssid: net.ssid });
     else if (["wpa2", "wpa2-wpa3", "wpa3"].includes(level)) fine.push({ net, level });
   }
   if (fine.length) {
@@ -120,7 +174,7 @@ export function wifiFindings({ wifi, homeSsid, devices = [] }) {
     const without = checked.filter((n) => !withWps.includes(n));
     for (const net of withWps) {
       const w = net.aps.find((a) => a.wps).wps;
-      out.push(finding("worth-fixing", net.device, `WPS is on for "${net.ssid}"`,
+      out.push(withSsid(net.ssid, "worth-fixing", net.device, `WPS is on for "${net.ssid}"`,
         `"${net.ssid}"${where(net)} announces WPS, the "press a button or type an 8-digit PIN to connect" feature${w.locked ? ". Its PIN is locked right now, which slows attacks down" : ""}.` +
           (without.length ? ` WPS is already off on ${without.map((n) => `"${n.ssid}"`).join(" and ")}.` : ""),
         "The PIN part of WPS has a known design weakness: on some devices, someone within Wi-Fi range can work out the PIN with free tools and get the Wi-Fi password, however long it is. The push-button part is fine.",
@@ -146,7 +200,84 @@ export function wifiFindings({ wifi, homeSsid, devices = [] }) {
 
 const adapterLabel = (a) => (a.chipset?.alfa || isAlfa(a.mac) ? "Your ALFA Wi-Fi adapter" : `Your Wi-Fi adapter "${a.name}"`);
 
-export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid }) {
+// ---------- Copies of your Wi-Fi's name ----------
+// A network with your Wi-Fi's exact name (or the same name with different capitals or spaces) broadcast by an access
+// point that isn't one of yours. Spotted from the normal list of nearby networks: no monitor mode needed.
+export function lookalikes({ wifi, homeSsid, devices = [] }) {
+  const connected = wifi?.adapters?.find((a) => a.connected);
+  const home = connected?.ssid || homeSsid;
+  if (!home || !(wifi?.aps || []).length) return { checked: false, copies: [] };
+  const { clusters, real } = homeAccessPoints({ wifi, home, devices });
+  const realLevel = Math.max(-1, ...real.flat().map((a) => STRENGTH[apLevel(a)] ?? -1));
+  const copies = clusters.filter((cl) => !real.includes(cl)).map((cl) => {
+    const level = apLevel(cl[0]);
+    const weaker = realLevel >= 0 && (STRENGTH[level] ?? -1) >= 0 && STRENGTH[level] < realLevel;
+    return { ssid: cl[0].ssid, bssids: cl.map((a) => a.bssid), level, weaker, exactName: cl[0].ssid === home };
+  });
+  return { checked: true, home, copies };
+}
+
+export function lookalikeFindings(args) {
+  const { checked, home, copies } = lookalikes(args);
+  if (!checked) return [];
+  if (!copies.length) {
+    return [finding("all-good", null, "No copies of your Wi-Fi nearby",
+      `None of the networks this computer can hear pretends to be "${home}".`,
+      "A fake copy of your network is a trick to get your devices to connect to someone else's access point. There's none in range right now.",
+      "Nothing to do.", [], 0)];
+  }
+  return copies.map((c) => {
+    const name = c.exactName ? `"${c.ssid}"` : `"${c.ssid}" (almost the same as "${home}")`;
+    const plain = { open: "no password", wep: "old WEP protection", wpa: "old WPA protection", "wpa2-tkip": "WPA2 with an old cipher" }[c.level];
+    if (c.weaker) {
+      return withSsid(c.ssid, "worth-fixing", null, `A network with ${plain || "weaker protection"} is using your Wi-Fi's name`,
+        `Another access point nearby broadcasts ${name} with ${plain || "weaker protection than yours"}. It doesn't belong to your router or extender.`,
+        "Phones and laptops join networks by name. A copy with weaker protection can trick a device into joining it, and whoever runs it could then see that device's unencrypted traffic.",
+        "Low to moderate: it could also be a neighbour whose router happens to use the same name. It matters more if your Wi-Fi name is unusual.",
+        ["Don't connect to it. On your phone, a copy usually shows without a lock icon.", "If any of your devices saved that open network, tell them to forget it.", "Give your Wi-Fi a name that's unique (not your family name or address), so copies stand out.", "Run Porchlight again later to see if it's still there."], 10);
+    }
+    return finding("good-to-know", null, `Another access point uses your Wi-Fi's name`,
+      `An access point that doesn't seem to belong to your router broadcasts ${name}, with the same kind of protection.`,
+      "That's normal if you have a mesh system or an extender set to the same name. Otherwise it may be a neighbour with the same default name, or a copy.",
+      "Low: devices can only join it if it also knows your password, or if you join it by mistake.",
+      ["If you have a mesh system or a second access point, this is probably it.", "If you don't, give your Wi-Fi a unique name so you can tell yours apart."], 5);
+  });
+}
+
+// ---------- Since the last checkup ----------
+export function changeFindings(changes) {
+  const out = [];
+  if (!changes || changes.firstRun) return out;
+  const when = changes.since ? new Date(changes.since).toLocaleDateString("en-GB", { day: "numeric", month: "long" }) : "last time";
+  if (changes.newDevices.length) {
+    const names = changes.newDevices.map((d) => deviceName(d));
+    out.push({
+      ...finding("good-to-know", changes.newDevices.length === 1 ? changes.newDevices[0] : null,
+        changes.newDevices.length === 1 ? "A new device joined your network" : `${changes.newDevices.length} new devices joined your network`,
+        `New since your last checkup (${when}): ${names.join(", ")}.`,
+        "Usually that's a new phone, a guest, or something that was switched off last time. If you don't recognise it, someone else may know your Wi-Fi password.",
+        "Low, if you recognise it.",
+        ["Check the device list below: its type and address can help you recognise it.", "If you don't recognise it, change your Wi-Fi password in your router's settings, then reconnect your own devices."], 5),
+      isNew: true,
+    });
+  }
+  if (changes.fixed.length) {
+    out.push(finding("all-good", null, changes.fixed.length === 1 ? "Fixed since your last checkup" : `${changes.fixed.length} things fixed since your last checkup`,
+      changes.fixed.map((p) => `${p.title}${p.deviceName ? ` (${p.deviceName})` : ""}`).join(". ") + ".",
+      "Porchlight checked again and these are gone. Nice work.", "Nothing to do.", [], 0));
+  }
+  return out;
+}
+
+// ---------- A score out of 100, from the problems only (notes and good news don't cost points) ----------
+export function scoreOf(findings) {
+  const cost = { "fix-soon": 25, "worth-fixing": 10 };
+  const value = Math.max(0, 100 - findings.reduce((s, f) => s + (cost[f.level] || 0), 0));
+  const label = value >= 90 ? "Well protected" : value >= 70 ? "A few things to tidy up" : value >= 45 ? "Needs some attention" : "Start with the top items";
+  return { value, label };
+}
+
+export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid, firewall = null }) {
   const out = [];
   const mappings = upnp?.router?.mappings || [];
 
@@ -154,12 +285,30 @@ export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid }) {
     const name = deviceName(d);
     const ports = d.ports || [];
 
-    if (ports.includes(23)) {
+    const telnet = [23, 2323].find((p) => ports.includes(p));
+    if (telnet) {
+      const fwd = forwardedTo(mappings, d.ip, telnet);
       out.push(finding("fix-soon", d, "Old remote-login service (Telnet) is on",
-        `${name} accepts Telnet, an old way to log into a device remotely.`,
-        "Telnet sends passwords as readable text, and it is the main door automated attacks use to take over cameras and routers. Right now it can only be reached from inside your home network" + (forwardedTo(mappings, d.ip, 23) ? ", but your router also forwards it to the internet." : "."),
-        forwardedTo(mappings, d.ip, 23) ? "High: it's reachable from the internet." : "Moderate: someone would need to be on your network, or another device on it would need to be infected first.",
+        `${name} accepts Telnet${telnet === 2323 ? " (on port 2323)" : ""}, an old way to log into a device remotely.`,
+        "Telnet sends passwords as readable text, and it is the main door automated attacks use to take over cameras and routers." + (fwd ? " Your router also forwards it to the internet." : " No device has asked your router to open it to the internet (we checked)."),
+        fwd ? "High: it's reachable from the internet." : "Moderate: someone would need to be on your network, or another device on it would need to be infected first.",
         ["Open the device's app or settings page.", "Look for Telnet, Remote access or Debug mode and turn it off.", "If there is no switch, update the firmware: many makers removed Telnet in later versions.", "Run Porchlight again to confirm it's closed."], 10));
+    }
+
+    if (ports.includes(5555)) {
+      out.push(finding("worth-fixing", d, "Android debugging is open to the network",
+        `${name} accepts connections on the Android debugging port (ADB, port 5555). This is common on Android TV boxes and some phones.`,
+        "On many devices this lets anyone on your network install apps and control the device without a password. Some ask for permission on screen first; many TV boxes don't.",
+        "Moderate: it needs someone or something on your network, and malware that spreads between Android TV boxes looks for exactly this port.",
+        ["On the device, open Settings → Developer options (or System → Advanced → Developer options).", "Turn off \"USB debugging\", \"Network debugging\" or \"ADB debugging\".", "If you can't find Developer options, the maker may have left it on by default: check for a firmware update.", "Run Porchlight again to confirm it's closed."], 5));
+    }
+
+    if (ports.includes(2375)) {
+      out.push(finding("worth-fixing", d, "Docker can be controlled over the network without a password",
+        `${name} accepts Docker remote-control connections on port 2375, the unencrypted one.`,
+        "Docker on port 2375 normally has no password and no encryption: anyone on your network who connects can start programs on that computer with full control.",
+        "Moderate: it needs someone on your network, but automated tools look for this port.",
+        ["If you didn't set this up on purpose, turn it off: in Docker Desktop → Settings → General, untick \"Expose daemon on tcp://localhost:2375\" (or remove -H tcp://0.0.0.0:2375 from the Docker service).", "If you need remote access, use SSH or port 2376 with TLS certificates.", "Run Porchlight again."], 10));
     }
 
     if (d.rtsp?.state === "open") {
@@ -268,8 +417,25 @@ export function buildFindings({ devices, upnp, routerAdmin, wifi, homeSsid }) {
     }
   }
 
-  // Your Wi-Fi networks: protection and WPS.
+  // Your Wi-Fi networks: protection, WPS, and copies of your network's name.
   out.push(...wifiFindings({ wifi, homeSsid, devices }));
+  out.push(...lookalikeFindings({ wifi, homeSsid, devices }));
+
+  // This computer's own firewall (Windows).
+  if (firewall) {
+    const me = devices.find((x) => x.self) || null;
+    if (firewall.on) {
+      out.push(finding("all-good", me, "This computer's firewall is on",
+        `Windows Firewall is on for the network you're using (${firewall.profiles.join(", ")} profile).`,
+        "Other devices on your network can only reach the programs on this computer that you've allowed.", "Nothing to do.", [], 0));
+    } else {
+      out.push(finding("worth-fixing", me, "This computer's firewall is off",
+        `Windows Firewall is off for the network you're using (${firewall.profiles.join(", ")} profile).`,
+        "Any program on this computer that listens for connections can be reached by every other device on your network, including ones you don't control.",
+        "Low to moderate: it matters most if another device on your network is infected, or when you take this computer to other networks.",
+        ["Open Start → Windows Security → Firewall & network protection.", "Click the network marked \"(active)\" and turn Microsoft Defender Firewall on.", "Run Porchlight again."], 2));
+    }
+  }
 
   // Wi-Fi adapters and monitor mode.
   for (const a of wifi?.adapters || []) {

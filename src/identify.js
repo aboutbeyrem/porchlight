@@ -2,6 +2,7 @@
 // server name, and reads the greeting an FTP server sends to everyone who connects. Never logs in, never sends
 // anything but a plain page request.
 import net from "node:net";
+import fs from "node:fs";
 import { httpRequest, pageTitle } from "./http.js";
 
 const WEB_PORTS = [80, 8080, 8000, 8081];
@@ -50,4 +51,48 @@ export function ftpSoftware(banner) {
   if (!banner) return null;
   const m = banner.match(/(Pure-FTPd|vsFTPd|ProFTPD|FileZilla Server|Microsoft FTP Service|bftpd|BusyBox|GNU inetutils)/i);
   return m ? m[1] : null;
+}
+
+// ---------- Maker of a device, from the first half of its MAC address ----------
+// Uses a vendor list that's already on this computer (Wireshark, Nmap or the ieee-data package ship one); Porchlight
+// never downloads anything. Without one, devices are named by what they announce instead.
+export const VENDOR_FILES = [
+  "/usr/share/wireshark/manuf",
+  "/usr/share/nmap/nmap-mac-prefixes",
+  "/usr/share/ieee-data/oui.txt",
+  "/var/lib/ieee-data/oui.txt",
+  "C:\\Program Files\\Wireshark\\manuf",
+  "C:\\Program Files (x86)\\Nmap\\nmap-mac-prefixes",
+  "C:\\Program Files\\Nmap\\nmap-mac-prefixes",
+];
+
+// Three formats: Wireshark "00:C0:CA<TAB>Alfa<TAB>ALFA, Inc.", Nmap "00C0CA ALFA", IEEE "00-C0-CA   (hex)<TAB><TAB>ALFA, INC."
+export function parseVendorList(text) {
+  const map = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    let m = line.match(/^([0-9A-F]{2})[:-]([0-9A-F]{2})[:-]([0-9A-F]{2})(\/\d+)?\s+(?:\(hex\)\s+)?([^\t]+?)(?:\t+(.+?))?\s*$/i);
+    if (m) {
+      if (!m[4]) map.set((m[1] + m[2] + m[3]).toLowerCase(), (m[6] || m[5]).trim()); // skip /28 and /36 sub-blocks
+      continue;
+    }
+    m = line.match(/^([0-9A-F]{6})\s+(.+?)\s*$/i);
+    if (m) map.set(m[1].toLowerCase(), m[2]);
+  }
+  return map;
+}
+
+let vendorMap;
+export function vendorOf(mac = "", files = VENDOR_FILES) {
+  if (vendorMap === undefined) {
+    vendorMap = null;
+    for (const f of files) {
+      try {
+        vendorMap = parseVendorList(fs.readFileSync(f, "utf8"));
+        if (vendorMap.size) break;
+      } catch {}
+    }
+  }
+  if (!vendorMap || !/^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/i.test(mac)) return null;
+  const name = vendorMap.get(mac.replace(/[:-]/g, "").slice(0, 6).toLowerCase());
+  return name ? name.replace(/,?\s+(inc|ltd|co|corp|corporation|limited|llc|gmbh|technologies|technology)\.?(,.*)?$/i, "").slice(0, 40) : null;
 }

@@ -1,31 +1,40 @@
 {
  "demo": true,
- "when": "2026-11-20T08:00:00.000Z",
- "durationSec": 31,
+ "when": "2026-11-20T18:00:00.000Z",
+ "durationSec": 34,
  "network": {
   "cidr": "192.168.1.0/24",
   "gateway": "192.168.1.1",
   "address": "192.168.1.50",
-  "interface": "Ethernet",
+  "interface": "Wi-Fi",
   "narrowed": false
  },
  "homeSsid": "HomeNet",
+ "score": {
+  "value": 60,
+  "label": "Needs some attention"
+ },
+ "changes": {
+  "firstRun": false,
+  "since": "2026-11-13T18:30:00.000Z",
+  "newDevices": [
+   "192.168.1.140"
+  ],
+  "fixed": [
+   "Old file-sharing service (FTP) is on"
+  ]
+ },
  "devices": [
   {
    "ip": "192.168.1.1",
    "name": "Your router (Home Router)",
    "kind": "router",
+   "vendor": null,
    "ports": [
-    21,
     80,
     443
    ],
    "doors": [
-    {
-     "port": 21,
-     "name": "FTP",
-     "plain": "old file transfer (no encryption)"
-    },
     {
      "port": 80,
      "name": "HTTP",
@@ -37,26 +46,32 @@
      "plain": "web page (encrypted)"
     }
    ],
+   "mac": "",
    "self": false,
    "isRouter": true,
    "web": null,
-   "broadcasts": []
+   "broadcasts": [],
+   "isNew": false
   },
   {
    "ip": "192.168.1.50",
    "name": "This computer",
    "kind": "this computer",
+   "vendor": null,
    "ports": [],
    "doors": [],
+   "mac": "",
    "self": true,
    "isRouter": false,
    "web": null,
-   "broadcasts": []
+   "broadcasts": [],
+   "isNew": false
   },
   {
    "ip": "192.168.1.115",
    "name": "PIX-LINK (192.168.1.115)",
    "kind": "Wi-Fi extender or access point",
+   "vendor": null,
    "ports": [
     80
    ],
@@ -67,17 +82,20 @@
      "plain": "web page (not encrypted)"
     }
    ],
+   "mac": "",
    "self": false,
    "isRouter": false,
    "web": "http://192.168.1.115/",
    "broadcasts": [
     "HomeNet-EXT"
-   ]
+   ],
+   "isNew": false
   },
   {
    "ip": "192.168.1.120",
    "name": "IPC-Living-Room (192.168.1.120)",
    "kind": "camera or recorder",
+   "vendor": null,
    "ports": [
     80,
     554
@@ -94,41 +112,85 @@
      "plain": "live video stream"
     }
    ],
+   "mac": "",
    "self": false,
    "isRouter": false,
    "web": "http://192.168.1.120/",
-   "broadcasts": []
+   "broadcasts": [],
+   "isNew": false
   },
   {
-   "ip": "192.168.1.131",
-   "name": "Galaxy-A52 (192.168.1.131)",
-   "kind": "phone or tablet",
-   "ports": [],
-   "doors": [],
+   "ip": "192.168.1.140",
+   "name": "Living Room TV (192.168.1.140)",
+   "kind": "TV or streaming device",
+   "vendor": null,
+   "ports": [
+    5555
+   ],
+   "doors": [
+    {
+     "port": 5555,
+     "name": "ADB",
+     "plain": "Android debugging"
+    }
+   ],
+   "mac": "",
    "self": false,
    "isRouter": false,
    "web": null,
-   "broadcasts": []
+   "broadcasts": [],
+   "isNew": true
+  },
+  {
+   "ip": "192.168.1.131",
+   "name": "Sara's iPhone (192.168.1.131)",
+   "kind": "phone or tablet",
+   "vendor": null,
+   "ports": [],
+   "doors": [],
+   "mac": "",
+   "self": false,
+   "isRouter": false,
+   "web": null,
+   "broadcasts": [],
+   "isNew": false
+  },
+  {
+   "ip": "192.168.1.152",
+   "name": "Phone, tablet or laptop at 192.168.1.152",
+   "kind": "phone, tablet or laptop",
+   "vendor": null,
+   "ports": [],
+   "doors": [],
+   "mac": "",
+   "self": false,
+   "isRouter": false,
+   "web": null,
+   "broadcasts": [],
+   "isNew": false
   }
  ],
- "summary": "3 worth fixing. Everything else looks fine.",
+ "wifi": {
+  "yours": [
+   {
+    "ssid": "HomeNet",
+    "reason": "home",
+    "auth": "WPA2-Personal",
+    "wps": false,
+    "device": null
+   },
+   {
+    "ssid": "HomeNet-EXT",
+    "reason": "device",
+    "auth": "WPA2-Personal",
+    "wps": true,
+    "device": "192.168.1.115"
+   }
+  ],
+  "wpsCheckable": true
+ },
+ "summary": "4 worth fixing. Everything else looks fine.",
  "findings": [
-  {
-   "level": "worth-fixing",
-   "device": "192.168.1.1",
-   "deviceName": "Your router (Home Router)",
-   "title": "Old file-sharing service (FTP) is on",
-   "found": "Your router runs an FTP server (Pure-FTPd). FTP is an old way of sharing files (usually a USB drive plugged into the router) that sends passwords and files unencrypted.",
-   "means": "Someone on your network could read the FTP password while it's being used, then open the shared files.",
-   "likely": "Low to moderate: it needs someone already on your network.",
-   "fix": [
-    "Open your router's settings page (http://192.168.1.1) and log in.",
-    "Look under USB, Storage or File sharing and turn FTP off.",
-    "If you do share a USB drive this way, keep it on but give it a strong password.",
-    "Run Porchlight again."
-   ],
-   "minutes": 5
-  },
   {
    "level": "worth-fixing",
    "device": "192.168.1.120",
@@ -147,6 +209,22 @@
   },
   {
    "level": "worth-fixing",
+   "device": "192.168.1.140",
+   "deviceName": "Living Room TV (192.168.1.140)",
+   "title": "Android debugging is open to the network",
+   "found": "Living Room TV (192.168.1.140) accepts connections on the Android debugging port (ADB, port 5555). This is common on Android TV boxes and some phones.",
+   "means": "On many devices this lets anyone on your network install apps and control the device without a password. Some ask for permission on screen first; many TV boxes don't.",
+   "likely": "Moderate: it needs someone or something on your network, and malware that spreads between Android TV boxes looks for exactly this port.",
+   "fix": [
+    "On the device, open Settings → Developer options (or System → Advanced → Developer options).",
+    "Turn off \"USB debugging\", \"Network debugging\" or \"ADB debugging\".",
+    "If you can't find Developer options, the maker may have left it on by default: check for a firmware update.",
+    "Run Porchlight again to confirm it's closed."
+   ],
+   "minutes": 5
+  },
+  {
+   "level": "worth-fixing",
    "device": "192.168.1.115",
    "deviceName": "PIX-LINK (192.168.1.115)",
    "title": "WPS is on for \"HomeNet-EXT\"",
@@ -158,7 +236,25 @@
     "Find WPS (usually under Wireless, Wi-Fi or WLAN) and turn it off, then save.",
     "Run Porchlight again to confirm it's off."
    ],
-   "minutes": 5
+   "minutes": 5,
+   "ssid": "HomeNet-EXT"
+  },
+  {
+   "level": "worth-fixing",
+   "device": null,
+   "deviceName": null,
+   "title": "A network with no password is using your Wi-Fi's name",
+   "found": "Another access point nearby broadcasts \"HomeNet\" with no password. It doesn't belong to your router or extender.",
+   "means": "Phones and laptops join networks by name. A copy with weaker protection can trick a device into joining it, and whoever runs it could then see that device's unencrypted traffic.",
+   "likely": "Low to moderate: it could also be a neighbour whose router happens to use the same name. It matters more if your Wi-Fi name is unusual.",
+   "fix": [
+    "Don't connect to it. On your phone, a copy usually shows without a lock icon.",
+    "If any of your devices saved that open network, tell them to forget it.",
+    "Give your Wi-Fi a name that's unique (not your family name or address), so copies stand out.",
+    "Run Porchlight again later to see if it's still there."
+   ],
+   "minutes": 10,
+   "ssid": "HomeNet"
   },
   {
    "level": "good-to-know",
@@ -190,14 +286,18 @@
   },
   {
    "level": "good-to-know",
-   "device": null,
-   "deviceName": null,
-   "title": "Your ALFA Wi-Fi adapter can do monitor mode on Linux, not on Windows",
-   "found": "Realtek RTL8811AU Wireless LAN 802.11ac USB 2.0 Network Adapter uses a Realtek RTL8812AU/8811AU family chip. Its Windows driver reports monitor mode as not supported, so it's off here.",
-   "means": "The hardware can do it: monitor mode works on Linux with the rtl8812au driver. On Windows it works as a normal Wi-Fi card.",
-   "likely": "Nothing to worry about.",
-   "fix": [],
-   "minutes": 0
+   "device": "192.168.1.140",
+   "deviceName": "Living Room TV (192.168.1.140)",
+   "title": "A new device joined your network",
+   "found": "New since your last checkup (13 November): Living Room TV (192.168.1.140).",
+   "means": "Usually that's a new phone, a guest, or something that was switched off last time. If you don't recognise it, someone else may know your Wi-Fi password.",
+   "likely": "Low, if you recognise it.",
+   "fix": [
+    "Check the device list below: its type and address can help you recognise it.",
+    "If you don't recognise it, change your Wi-Fi password in your router's settings, then reconnect your own devices."
+   ],
+   "minutes": 5,
+   "isNew": true
   },
   {
    "level": "all-good",
@@ -218,6 +318,28 @@
    "found": "\"HomeNet\" uses WPA2. \"HomeNet-EXT\" (broadcast by your PIX-LINK extender at 192.168.1.115) uses WPA2.",
    "means": "That's the current standard. Its real strength is the password: 12+ characters that aren't a name or a date is what keeps it safe.",
    "likely": "Nothing to do. If your router offers WPA3, you can switch later.",
+   "fix": [],
+   "minutes": 0
+  },
+  {
+   "level": "all-good",
+   "device": "192.168.1.50",
+   "deviceName": "This computer",
+   "title": "This computer's firewall is on",
+   "found": "Windows Firewall is on for the network you're using (private profile).",
+   "means": "Other devices on your network can only reach the programs on this computer that you've allowed.",
+   "likely": "Nothing to do.",
+   "fix": [],
+   "minutes": 0
+  },
+  {
+   "level": "all-good",
+   "device": null,
+   "deviceName": null,
+   "title": "Fixed since your last checkup",
+   "found": "Old file-sharing service (FTP) is on (Your router (Home Router)).",
+   "means": "Porchlight checked again and these are gone. Nice work.",
+   "likely": "Nothing to do.",
    "fix": [],
    "minutes": 0
   }

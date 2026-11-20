@@ -6,7 +6,7 @@ explains each one in plain words: what we found, what it means, how likely it is
 
 It looks; it never breaks in. Windows and Linux.
 
-![A sample Porchlight report of a made-up home: three things worth fixing, each explained in plain words with steps to fix it](docs/panel-sample.png)
+![A sample Porchlight report of a made-up home: a score of 60 out of 100, a note that one new device joined and one thing was fixed since last week, and a map of the network with each device coloured by what was found on it](docs/panel-sample.png)
 
 *Sample report of a made-up home. Open `http://localhost:7377/?demo` to see it in the panel.*
 
@@ -14,14 +14,27 @@ It looks; it never breaks in. Windows and Linux.
 
 | Check | What it tells you |
 |---|---|
-| **Devices on your network** | What's connected, named from what each device announces (UPnP, its web page title, your router's names). |
-| **Open doors** | 15 common services: Telnet, FTP, VNC, Remote Desktop, MQTT, camera and recorder services, web pages. |
+| **Devices on your network** | What's connected, named from what each device announces: UPnP, mDNS (phones, TVs, printers), NetBIOS (Windows PCs), its web page title, and the maker's name when a vendor list is on your computer. Phones with private Wi-Fi addresses and devices connected through a repeater are recognised as such. |
+| **Open doors** | 18 common services: Telnet, FTP, VNC, Remote Desktop, MQTT, Android debugging (ADB), Docker, camera and recorder services, web pages. |
 | **Cameras** | Whether a camera streams its video (RTSP) to anyone who asks, without a password. |
 | **Doors opened to the internet** | Whether devices asked your router to open ports to the internet on their own (UPnP), and which. |
 | **Router settings page** | Whether it's offered over an encrypted connection. |
 | **Your Wi-Fi protection** | WPA3, WPA2, WPA, WEP or none, for your main network, a second network from the same router, and your extender's network. Never your neighbours'. |
 | **WPS** | Whether your access points announce WPS, the PIN-based way to join, read from what they broadcast. |
+| **Fake copies of your Wi-Fi** | Whether an access point that isn't yours broadcasts your Wi-Fi's name, especially with weaker protection. Works from the normal list of nearby networks, no monitor mode needed. |
+| **This computer's firewall** | Whether Windows Firewall is on for the network you're using. |
 | **Wi-Fi adapters and monitor mode** | Whether you have an adapter that can do monitor mode, and whether it's on right now. |
+
+### Between checkups
+
+Porchlight remembers, on your computer only, which devices it saw and what it found. The next checkup tells you when
+**a new device joined** your network and **what you fixed**. A problem only counts as fixed when Porchlight could look
+again: an extender that was asleep isn't a fixed one. `--no-history` turns this off and `--forget` deletes it.
+
+### The panel
+
+A score out of 100 (only real problems cost points), a map of your network where tapping a device shows what was
+found on it, filters by level, and a report you can save as a PDF.
 
 ## How a finding reads
 
@@ -65,7 +78,8 @@ Prefer the terminal:
 node bin/porchlight.js --scan --this-is-my-network --wifi "Your Wi-Fi name"
 ```
 
-Add `--json` for a machine-readable report.
+Add `--json` for a machine-readable report, `--no-history` to skip remembering devices, or run
+`node bin/porchlight.js --forget` to delete what it remembers (stored in `~/.porchlight`).
 
 **Windows** uses built-in tools (`route`, `arp`, `netsh`) and a small PowerShell helper,
 [`src/win/wlan-bss.ps1`](src/win/wlan-bss.ps1), that reads Wi-Fi beacons through the Windows Wi-Fi API. No admin
@@ -74,7 +88,7 @@ rights needed.
 
 ## Honest limits
 
-- It checks 15 common ports, not every port. It's a checkup, not a full audit.
+- It checks 18 common ports, not every port. It's a checkup, not a full audit.
 - It never tries passwords, so it can't tell whether a device still has its factory password. It reminds you to check.
 - Devices that are asleep or ignore everything (phones often do) may not show up.
 - It covers one IPv4 network of up to 254 addresses. IPv6 isn't checked yet.
@@ -84,15 +98,19 @@ rights needed.
 - On Windows, monitor-mode support comes from what the adapter's driver reports.
 - **Linux:** the Linux code is covered by tests on sample command output, but it hasn't been run end to end on a Linux
   machine yet.
-- **Not built yet:** the monitor-mode detectors from the plan (spotting deauthentication attacks and fake copies of
-  your network). Today Porchlight reports whether you have a monitor-mode adapter and whether it's on.
+- Fake-copy detection compares access points by name and hardware address. A copy that also clones your router's
+  hardware address can't be told apart this way.
+- Device makers are only named when a vendor list (from Wireshark, Nmap or the ieee-data package) is on the computer.
+  Porchlight never downloads one.
+- **Not built yet:** spotting deauthentication attacks with a monitor-mode adapter. Today Porchlight reports whether
+  you have a monitor-mode adapter and whether it's on.
 
 ## Tested on a real home
 
 Run on a real home network (Windows 10, Ethernet, plus an ALFA AWUS036ACS USB Wi-Fi adapter). It found an FTP server
 running on the router, found WPS switched on in a Wi-Fi extender while the main network had it off, named the
 extender from its own web page, and confirmed that the router doesn't let devices open ports to the internet by
-themselves.
+themselves, that no copy of the home Wi-Fi was nearby, and that the computer's firewall was on.
 
 Testing there also changed the design:
 
@@ -101,6 +119,10 @@ Testing there also changed the design:
 - A Windows scan sometimes missed the extender's network, and once that produced a false "no password" warning.
   Missing information is now always "unknown", never "open", and the protection type is read from what the access
   point itself broadcasts.
+- The extender gives every device connected through it its own MAC address, so a phone behind it looked like a second
+  extender. Porchlight now spots shared addresses and labels those devices as being on the extender.
+- An extender that was asleep made its WPS problem disappear, which first showed up as "fixed". Now a problem only
+  counts as fixed when its device answered and its Wi-Fi network was heard again.
 
 ## Tests
 
@@ -108,9 +130,12 @@ Testing there also changed the design:
 npm test
 ```
 
-40 tests: parsers for every command's output (English and French Windows), the rules and tone of every finding
-(no scare words), fake cameras and FTP servers on `127.0.0.1`, and the panel's security (DNS rebinding, cross-site
-requests, consent, path traversal).
+56 tests: parsers for every command's output (English and French Windows), mDNS and NetBIOS answers, the rules and
+tone of every finding (no scare words), fake copies of a network (including one that tries to vouch for itself through
+a neighbour's router), memory between checkups, fake cameras and FTP servers on `127.0.0.1`, and the panel's security
+(DNS rebinding, cross-site requests, consent, path traversal).
+
+The sample report is built by the real rules from a made-up home: `node scripts/make-demo.js`.
 
 ## How it was made
 

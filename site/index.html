@@ -159,16 +159,19 @@
   <main class="wrap">
     <section id="checks" aria-labelledby="checks-title">
       <h2 class="title" id="checks-title">What it checks</h2>
-      <p class="intro">Eight checks, chosen because they're the ones that matter in a real home, not because they're easy to automate.</p>
+      <p class="intro">Ten checks, chosen because they're the ones that matter in a real home, not because they're easy to automate.</p>
       <dl class="checks">
-        <div><dt>Devices on your network</dt><dd>What's connected, named from what each device says about itself: its web page, UPnP, or your router.</dd></div>
-        <div><dt>Open doors</dt><dd>Fifteen common services, like Telnet, FTP, remote desktop, VNC and camera recorder services.</dd></div>
+        <div><dt>Devices on your network</dt><dd>What's connected, named from what each device says about itself, like "Living Room TV" or "Sara's iPhone", and shown on a map of your home network.</dd></div>
+        <div><dt>Open doors</dt><dd>Eighteen common services, like Telnet, FTP, remote desktop, Android debugging on TV boxes, and camera recorder services.</dd></div>
         <div><dt>Cameras</dt><dd>Whether a camera hands its live video to anyone who asks, without a password.</dd></div>
         <div><dt>Doors opened to the internet</dt><dd>Whether a device asked your router to open a port to the internet without telling you.</dd></div>
         <div><dt>Your Wi-Fi protection</dt><dd>WPA3, WPA2, or something older, for your main network, your extender and a second network from your router. Never your neighbours'.</dd></div>
         <div><dt>WPS</dt><dd>Read from what your access points broadcast, so it works without logging into anything.</dd></div>
         <div><dt>Router settings page</dt><dd>Whether your router's admin page offers an encrypted connection.</dd></div>
+        <div><dt>Fake copies of your Wi-Fi</dt><dd>Whether someone nearby broadcasts your Wi-Fi's name from an access point that isn't yours, especially one with no password.</dd></div>
+        <div><dt>New devices and fixes</dt><dd>It remembers, on your computer only, what it saw last time, and tells you when a new device joins or something you fixed is really gone.</dd></div>
         <div><dt>Monitor mode</dt><dd>Whether you have a Wi-Fi adapter that can listen to all traffic nearby, and whether it's doing that right now.</dd></div>
+        <div><dt>This computer's firewall</dt><dd>Whether Windows Firewall is on for the network you're using.</dd></div>
       </dl>
     </section>
 
@@ -183,8 +186,8 @@
       </ul>
       <p class="levels"><span class="pill p-soon">Fix soon</span><span class="pill p-worth">Worth fixing</span><span class="pill p-know">Good to know</span><span class="pill p-good">All good</span></p>
       <figure>
-        <img src="panel-sample.png" width="860" height="1180" loading="lazy" alt="A sample Porchlight report of a made-up home: three things worth fixing, starting with an FTP server on the router, each explained with steps to fix it.">
-        <figcaption>A sample report of a made-up home, as it appears in the panel.</figcaption>
+        <img src="panel-sample.png" width="860" height="1240" loading="lazy" alt="A sample Porchlight report of a made-up home: a score of 60 out of 100, one new device and one fix since last week, and a map of the network with each device coloured by what was found on it.">
+        <figcaption>A sample report of a made-up home: the score, what changed since last week, and a map of the network. Tap a device to see what was found on it.</figcaption>
       </figure>
     </section>
 
@@ -216,11 +219,11 @@ node bin/porchlight.js</code></pre>
     <section id="limits" aria-labelledby="limits-title">
       <h2 class="title" id="limits-title">What it can't tell you (yet)</h2>
       <ul class="limits">
-        <li>It checks fifteen common services, not every port. It's a checkup, not a full audit.</li>
+        <li>It checks eighteen common services, not every port. It's a checkup, not a full audit.</li>
         <li>It never tries passwords, so it reminds you to change factory passwords rather than testing them.</li>
         <li>Sleeping phones and devices that ignore everything may not show up.</li>
         <li>It can't see port forwards you set up by hand in your router, only ones devices opened themselves.</li>
-        <li>Spotting Wi-Fi attacks with a monitor-mode adapter is planned, not built.</li>
+        <li>Spotting disconnection (deauthentication) attacks with a monitor-mode adapter is planned, not built.</li>
       </ul>
       <p class="intro">The full list is in the <a href="https://github.com/aboutbeyrem/porchlight#honest-limits">README</a>.</p>
     </section>

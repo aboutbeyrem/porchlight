@@ -1,6 +1,6 @@
 {
   "name": "porchlight",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A security checkup for your home network, explained in plain language. Looks, never breaks in.",
   "type": "module",
   "bin": { "porchlight": "bin/porchlight.js" },

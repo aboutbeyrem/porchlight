@@ -12,7 +12,7 @@ export function parseSsdpResponse(text) {
   return headers;
 }
 
-export function searchSsdp(timeoutMs = 3000) {
+export function searchSsdp(timeoutMs = 3000, localAddress = null) {
   return new Promise((resolve) => {
     const found = new Map(); // location -> { ip, location, server }
     const sock = dgram.createSocket({ type: "udp4", reuseAddr: true });
@@ -25,6 +25,7 @@ export function searchSsdp(timeoutMs = 3000) {
       resolve([...found.values()]);
     });
     sock.bind(0, () => {
+      if (localAddress) try { sock.setMulticastInterface(localAddress); } catch {}
       const search = ["M-SEARCH * HTTP/1.1", "HOST: 239.255.255.250:1900", 'MAN: "ssdp:discover"', "MX: 2", "ST: ssdp:all", "", ""].join("\r\n");
       sock.send(search, 1900, "239.255.255.250");
       setTimeout(() => sock.send(search, 1900, "239.255.255.250"), 500);
@@ -84,8 +85,8 @@ async function listMappings(service) {
 }
 
 // Returns { devices: [{ip, friendlyName, manufacturer, modelName}], router: { found, mappings } }
-export async function upnpSurvey() {
-  const responders = await searchSsdp();
+export async function upnpSurvey(localAddress = null) {
+  const responders = await searchSsdp(3000, localAddress);
   const devices = [];
   const router = { found: false, mappings: [] };
   for (const r of responders) {

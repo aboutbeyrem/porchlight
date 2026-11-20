@@ -34,6 +34,7 @@ export function parseNetshInterfaces(text) {
     else if (/^SSID$/i.test(k)) cur.ssid = v;
     else if (/^(Authentication|Authentification)$/i.test(k)) cur.auth = v;
     else if (/^(Cipher|Chiffrement)$/i.test(k)) cur.cipher = v;
+    else if (/^(AP )?BSSID$/i.test(k) && /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(v)) cur.bssid = v.toLowerCase();
   }
   return adapters;
 }
@@ -102,7 +103,7 @@ export function parseIwListMonitor(text) {
 export function parseNmcli(text) {
   return text.split(/\r?\n/).filter(Boolean).map((line) => {
     const parts = line.split(/(?<!\\):/).map((s) => s.replace(/\\:/g, ":"));
-    return { active: parts[0] === "yes", ssid: parts[1], auth: parts.length > 2 ? parts[2] || "Open" : "", signal: Number(parts[3]) || undefined };
+    return { active: parts[0] === "yes", ssid: parts[1], auth: parts.length > 2 ? parts[2] || "Open" : "", signal: Number(parts[3]) || undefined, bssid: parts[4] ? parts[4].toLowerCase() : null };
   });
 }
 
@@ -277,6 +278,7 @@ export async function wifiSurvey({ beacons = true } = {}) {
       ssid: i.connected ? i.ssid : null,
       auth: i.connected ? i.auth : null,
       cipher: i.connected ? i.cipher : null,
+      bssid: i.connected ? i.bssid || null : null,
       monitorSupported: caps[i.name]?.monitorSupported ?? null,
       inMonitorMode: null, // Windows can't tell without Npcap; reported as unknown
       chipset: chipsetHint(i.description, i.mac),
@@ -285,7 +287,7 @@ export async function wifiSurvey({ beacons = true } = {}) {
   }
   const devs = parseIwDev((await run("iw", ["dev"])).stdout);
   const monitorByPhy = parseIwListMonitor((await run("iw", ["list"])).stdout);
-  const nm = parseNmcli((await run("nmcli", ["-t", "-f", "ACTIVE,SSID,SECURITY,SIGNAL", "dev", "wifi"])).stdout);
+  const nm = parseNmcli((await run("nmcli", ["-t", "-f", "ACTIVE,SSID,SECURITY,SIGNAL,BSSID", "dev", "wifi"])).stdout);
   const active = nm.find((n) => n.active);
   const adapters = devs.map((d) => ({
     name: d.name,
@@ -295,6 +297,7 @@ export async function wifiSurvey({ beacons = true } = {}) {
     ssid: d.ssid || null,
     auth: d.ssid && active && active.ssid === d.ssid ? active.auth : null,
     cipher: null,
+    bssid: d.ssid && active && active.ssid === d.ssid ? active.bssid : null,
     monitorSupported: monitorByPhy[d.phy] ?? null,
     inMonitorMode: d.type === "monitor",
     chipset: chipsetHint("", d.mac || ""),

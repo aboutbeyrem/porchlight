@@ -13,7 +13,10 @@ export const COMMON_PORTS = {
   445: { name: "SMB", plain: "Windows file sharing" },
   554: { name: "RTSP", plain: "live video stream" },
   1883: { name: "MQTT", plain: "smart-home messages (not encrypted)" },
+  2323: { name: "Telnet-alt", plain: "old remote login (no encryption)" },
+  2375: { name: "Docker", plain: "Docker remote control (no encryption)" },
   3389: { name: "RDP", plain: "Windows remote desktop" },
+  5555: { name: "ADB", plain: "Android debugging" },
   5900: { name: "VNC", plain: "remote screen control" },
   8000: { name: "HTTP-alt", plain: "web page (often cameras and recorders)" },
   8080: { name: "HTTP-alt", plain: "web page (often admin pages)" },
@@ -22,7 +25,7 @@ export const COMMON_PORTS = {
   37777: { name: "Dahua", plain: "Dahua camera/recorder service" },
 };
 
-export function checkPort(host, port, timeoutMs = 1500) {
+export function checkPort(host, port, timeoutMs = 1200) {
   return new Promise((resolve) => {
     const sock = net.connect({ host, port });
     const done = (open) => {

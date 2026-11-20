@@ -33,23 +33,44 @@
       <h1>Checking your home…</h1>
       <p class="lead" id="r-step">Starting</p>
       <div class="bar" aria-hidden="true"><span></span></div>
-      <p class="hint">This usually takes one to two minutes. Porchlight knocks gently so your devices keep working normally.</p>
+      <p class="hint">This usually takes under a minute. Porchlight knocks gently, one door at a time, so your devices keep working normally.</p>
     </section>
 
     <section id="results" hidden>
       <div class="summary panel">
         <p id="demo-note" class="demo-note" hidden>Sample report of a made-up home. <a href="/">Check your own network</a></p>
-        <h1 id="s-sentence"></h1>
-        <p class="meta" id="s-meta"></p>
-        <div class="counts" id="s-counts"></div>
+        <div class="summary-top">
+          <div class="score" id="score" role="img">
+            <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="track" cx="60" cy="60" r="52"/><circle class="value" id="score-arc" cx="60" cy="60" r="52"/></svg>
+            <div class="score-num"><b id="score-value"></b><span>/100</span></div>
+          </div>
+          <div>
+            <p class="score-label" id="score-label"></p>
+            <h1 id="s-sentence"></h1>
+            <p class="meta" id="s-meta"></p>
+          </div>
+        </div>
+        <p class="changes" id="s-changes" hidden></p>
+        <div class="counts" id="s-counts" role="group" aria-label="Show findings by level"></div>
         <div class="actions">
           <button id="again" class="secondary">Check again</button>
           <button id="pdf" class="secondary">Save as PDF</button>
         </div>
       </div>
+
+      <section class="panel map" aria-labelledby="map-title">
+        <h2 id="map-title">Your network</h2>
+        <p class="hint">Tap a device to see only what Porchlight found on it.</p>
+        <div class="map-router" id="map-router"></div>
+        <ul class="map-wifi" id="map-wifi" aria-label="Your Wi-Fi networks"></ul>
+        <ul class="map-devices" id="map-devices"></ul>
+      </section>
+
+      <div class="filter-note" id="filter-note" hidden><span id="filter-text"></span> <button id="filter-clear" class="link">Show everything</button></div>
       <div id="list"></div>
+
       <details class="panel devices">
-        <summary>Devices we found (<span id="d-count">0</span>)</summary>
+        <summary>Device details (<span id="d-count">0</span>)</summary>
         <table><thead><tr><th>Device</th><th>Address</th><th>Open doors</th></tr></thead><tbody id="d-body"></tbody></table>
       </details>
     </section>
@@ -61,7 +82,7 @@
     </section>
   </main>
 
-  <footer>Porchlight checks only the network you're on, only with your permission, and never cracks, floods or breaks into anything.</footer>
+  <footer>Porchlight checks only the network you're on, only with your permission, and never cracks, floods or breaks into anything. What it remembers between checkups stays on this computer.</footer>
   <script src="panel.js"></script>
 </body>
 </html>
