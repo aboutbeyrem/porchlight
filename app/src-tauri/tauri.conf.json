@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Porchlight",
+  "version": "0.5.0",
+  "identifier": "com.aboutbeyrem.porchlight",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Porchlight",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "visible": false,
+        "decorations": false,
+        "shadow": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "Beyrem Oueslati",
+    "homepage": "https://porchlight-beryl.vercel.app",
+    "copyright": "MIT License, Beyrem Oueslati",
+    "category": "Utility",
+    "shortDescription": "A calm security guard for your home network",
+    "longDescription": "Porchlight watches your home network in the background and tells you, in plain words, when a new device joins, when something pretends to be your router, or when your Wi-Fi has a weakness. It looks; it never breaks in.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@
 // anything but a plain page request.
 import net from "node:net";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { httpRequest, pageTitle } from "./http.js";
 
 const WEB_PORTS = [80, 8080, 8000, 8081];
@@ -54,9 +55,10 @@ export function ftpSoftware(banner) {
 }
 
 // ---------- Maker of a device, from the first half of its MAC address ----------
-// Uses a vendor list that's already on this computer (Wireshark, Nmap or the ieee-data package ship one); Porchlight
-// never downloads anything. Without one, devices are named by what they announce instead.
+// Uses the IEEE manufacturer list bundled in data/oui.txt (or Wireshark's, Nmap's or ieee-data's if that's missing).
+// Porchlight never downloads anything while it runs.
 export const VENDOR_FILES = [
+  fileURLToPath(new URL("../data/oui.txt", import.meta.url)), // bundled: IEEE registry, short names
   "/usr/share/wireshark/manuf",
   "/usr/share/nmap/nmap-mac-prefixes",
   "/usr/share/ieee-data/oui.txt",

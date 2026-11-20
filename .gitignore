@@ -6,3 +6,5 @@ scan*.json
 .vercel/
 .site-build/
 .vercel/
+app/src-tauri/target/
+app/src-tauri/gen/

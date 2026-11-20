@@ -51,7 +51,11 @@ export function deviceName(d) {
   const label = d.friendlyName || d.mdns?.name || d.web?.label || d.netbios?.name || clean(d.hostname) || clean(d.mdns?.host);
   if (label) return `${label} (${d.ip})`;
   const kind = deviceKind(d);
-  if (d.vendor) return kind === "device" ? `${d.vendor} device at ${d.ip}` : `${capitalize(kind)} (${d.vendor}) at ${d.ip}`;
+  if (d.vendor) {
+    if (kind === "device") return `${d.vendor} device at ${d.ip}`;
+    if (kind.toLowerCase().includes(d.vendor.toLowerCase())) return `${capitalize(kind)} at ${d.ip}`;
+    return `${d.vendor} ${kind} at ${d.ip}`;
+  }
   return `${capitalize(kind)} at ${d.ip}`;
 }
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);

@@ -16,6 +16,12 @@ fs.mkdirSync(path.join(out, "demo"), { recursive: true });
 fs.writeFileSync(path.join(out, ".vercelignore"), ".env*\n.vercel\n.gitignore\nREADME.txt\n"); // never upload tokens
 for (const f of fs.readdirSync(path.join(root, "site"))) fs.copyFileSync(path.join(root, "site", f), path.join(out, f));
 for (const f of ["index.html", "panel.css", "panel.js", "demo.json"]) fs.copyFileSync(path.join(root, "public", f), path.join(out, "demo", f));
+// The Windows installer, when it has been built (app/: npx @tauri-apps/cli build).
+const installer = path.join(root, "app", "src-tauri", "target", "release", "bundle", "nsis", "Porchlight_0.5.0_x64-setup.exe");
+if (fs.existsSync(installer)) {
+  fs.mkdirSync(path.join(out, "download"), { recursive: true });
+  fs.copyFileSync(installer, path.join(out, "download", path.basename(installer)));
+}
 
 // Absolute links for previews when the address is known.
 let html = fs.readFileSync(path.join(out, "index.html"), "utf8");

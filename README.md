@@ -14,6 +14,33 @@ It looks; it never breaks in. Windows and Linux, no dependencies, nothing leaves
 
 *Sample report of a made-up home. Open `http://localhost:7377/?demo` to see it in the panel.*
 
+## Porchlight for Windows: the app
+
+![The Porchlight app: a safety score, four things worth fixing, and a map of a home network with the router in the middle](docs/app-overview.png)
+
+**[Download Porchlight 0.5.0 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.5.0_x64-setup.exe)** (2 MB, Windows 10 and 11, installs per user without admin rights).
+
+A tray app written in Rust ([Tauri](https://tauri.app)) that keeps watching your home network in the background and
+sends a notification when something changes:
+
+- **A new device joins your network**, named from what it announces (mDNS, NetBIOS, its web page, UPnP) and its
+  maker (the IEEE registry is built in), with any risky open doors found on it right away. You can rename anything.
+- **Something pretends to be your router**: another device answering with the router's hardware address, or the
+  router's identity changing (how ARP-spoofing "man-in-the-middle" attacks start).
+- **A fake copy of your Wi-Fi appears** with weaker protection (an "evil twin").
+- **Wi-Fi shield:** protection type, WPS, kick-off protection (802.11w management frame protection, which stops
+  deauthentication attacks), and the open networks this computer would join by itself, which is what MANA and KARMA
+  fake-hotspot attacks rely on. Read straight from the Windows Wi-Fi API, no monitor mode or admin rights needed.
+- A daily full checkup of every device: Telnet, FTP, SMBv1, Remote Desktop without NLA, open camera streams, Android
+  debugging, Docker, VNC, and ports opened to the internet through UPnP.
+
+Everything stays in one file on your computer (`%APPDATA%com.aboutbeyrem.porchlight`); Settings → Forget everything
+deletes it. The installer isn't code-signed yet, so Windows SmartScreen may warn the first time (More info → Run
+anyway). Build it yourself from `app/`: install Rust, then `npx @tauri-apps/cli build`.
+
+The command-line checkup below (Node.js) is the office edition: it adds the office profile, policy files, CIS
+mapping and HTML/CSV reports, and runs on Linux too.
+
 ## What it checks
 
 | Check | What it tells you |

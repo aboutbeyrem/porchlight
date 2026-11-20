@@ -57,10 +57,10 @@
       <h1 class="headline" data-split>Turn the light on your home network.</h1>
       <p class="lead reveal-in">Porchlight finds every device on your Wi-Fi, checks for the few problems that actually matter, and explains each one in plain words, with the fix. <strong>It looks; it never breaks in.</strong></p>
       <div class="ctas reveal-in">
-        <a class="btn primary" href="#run">Run it on your network</a>
+        <a class="btn primary" href="#app">Download for Windows</a>
         <a class="btn ghost" href="/demo/">Try the live demo</a>
       </div>
-      <p class="fine reveal-in">Free and open source · Windows and Linux · nothing leaves your computer</p>
+      <p class="fine reveal-in">Free and open source · Windows app, 2 MB · nothing leaves your computer</p>
 
       <ul class="yard" aria-label="Example: devices Porchlight found in a made-up home">
         <li class="chip"><span class="dot good"></span><span><b>Home router</b><small>router</small></span></li>
@@ -79,7 +79,28 @@
   </header>
 
   <main id="main">
-    <section class="day-start" id="how" aria-labelledby="how-title">
+    <section class="day-start" id="app" aria-labelledby="app-title">
+      <div class="wrap">
+        <h2 class="title reveal" id="app-title">A guard that keeps watching</h2>
+        <p class="intro reveal">The Porchlight app lives in your tray, checks your home network every few minutes, and sends a notification when something changes. Written in Rust: 2 MB to download, about 25 MB of memory.</p>
+        <figure class="shot app-shot reveal-wipe">
+          <img src="app-overview.png" width="1180" height="760" loading="lazy" decoding="async" alt="The Porchlight app: a safety score of 60, four things worth fixing, and a glowing map of a home network with the router in the middle and devices around it.">
+        </figure>
+        <ul class="never app-list" role="list">
+          <li class="reveal"><b>A new device joins</b><span>You get a notification with what it is and who made it, so a stranger on your Wi-Fi doesn't go unnoticed.</span></li>
+          <li class="reveal"><b>Something pretends to be your router</b><span>The first step of a man-in-the-middle attack (ARP spoofing) is caught as it happens.</span></li>
+          <li class="reveal"><b>A fake copy of your Wi-Fi appears</b><span>An "evil twin" broadcasting your network's name with weaker protection, spotted without any special adapter.</span></li>
+          <li class="reveal"><b>Your Wi-Fi can be attacked</b><span>Kick-off (deauthentication) protection, WPS, and the open networks your computer would join by itself (what MANA attacks use).</span></li>
+        </ul>
+        <div class="download reveal">
+          <a class="btn primary" href="/download/Porchlight_0.5.0_x64-setup.exe" download>Download Porchlight 0.5.0 for Windows</a>
+          <p class="fine-dark">Windows 10 and 11 · 2 MB · installs for your user only, no admin needed.<br>
+          The installer isn't code-signed yet, so Windows may show "Windows protected your PC": choose <b>More info → Run anyway</b>. You can check the file: SHA-256 <code class="hash">510987662926e362d45b54d55a7f0c1d81e227884dae962d022ad0b40d7a0d1a</code>, and the source is on <a href="https://github.com/aboutbeyrem/porchlight">GitHub</a>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" aria-labelledby="how-title">
       <div class="wrap">
         <h2 class="title reveal" id="how-title">How a checkup goes</h2>
         <p class="intro reveal">About thirty seconds for a typical home. You watch it happen on one calm screen.</p>
