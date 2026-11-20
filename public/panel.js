@@ -2,7 +2,7 @@
 const $ = (id) => document.getElementById(id);
 const LABEL = { "fix-soon": "Fix soon", "worth-fixing": "Worth fixing", "good-to-know": "Good to know", "all-good": "All good" };
 const ORDER = Object.keys(LABEL);
-const isDemo = new URLSearchParams(location.search).has("demo");
+const isDemo = new URLSearchParams(location.search).has("demo") || location.pathname.startsWith("/demo");
 let report = null;
 const filter = { level: null, device: null };
 

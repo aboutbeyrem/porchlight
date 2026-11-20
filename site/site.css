@@ -83,6 +83,8 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .chip { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 11px 14px; border-radius: 12px; min-width: 170px;
   background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10); box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.7); }
 .chip:nth-child(2), .chip:nth-child(4) { transform: translateY(14px); }
+.chip:nth-child(1) { --i: 0; } .chip:nth-child(2) { --i: 1; } .chip:nth-child(3) { --i: 2; } .chip:nth-child(4) { --i: 3; } .chip:nth-child(5) { --i: 4; }
+.lead { --d: 0; } .ctas { --d: 1; } .fine { --d: 2; }
 .chip b { display: block; font-size: 0.95rem; color: var(--on-night); }
 .chip small { color: var(--on-night-2); font-size: 0.8rem; }
 .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; }

@@ -8,6 +8,8 @@ Controls v8 safeguards.
 
 It looks; it never breaks in. Windows and Linux, no dependencies, nothing leaves your computer.
 
+**Website:** [porchlight-beryl.vercel.app](https://porchlight-beryl.vercel.app) · **Live demo** (a made-up home, nothing is scanned): [porchlight-beryl.vercel.app/demo](https://porchlight-beryl.vercel.app/demo/)
+
 ![A sample Porchlight report of a made-up home: a score of 60 out of 100, a note that one new device joined and one thing was fixed since last week, and a map of the network with each device coloured by what was found on it](docs/panel-sample.png)
 
 *Sample report of a made-up home. Open `http://localhost:7377/?demo` to see it in the panel.*
