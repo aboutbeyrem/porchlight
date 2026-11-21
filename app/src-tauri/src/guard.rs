@@ -43,6 +43,8 @@ pub struct Device {
     pub names_checked: u64,
     /// Which set of name sources was last asked; a newer Porchlight asks again straight away.
     pub naming: u32,
+    /// The user's answer to "Is this yours?": Some(true) ours, Some(false) not recognised, None not asked yet.
+    pub owner: Option<bool>,
     pub deep: Option<DeepResult>,
 }
 
@@ -145,6 +147,8 @@ pub struct State {
     pub notified: Vec<String>,
     /// The last DNS test result (it only runs on full checkups).
     pub dns_invents: Option<bool>,
+    /// Findings the user said are fine ("ID|device"): kept out of the score, the to-do list and alerts.
+    pub accepted: Vec<String>,
 }
 
 impl State {
@@ -168,6 +172,10 @@ impl State {
         self.alerts.insert(0, a.clone());
         self.alerts.truncate(200);
         a
+    }
+    /// Recomputes the score after the user accepts or un-accepts a finding.
+    pub fn refresh_score(&mut self) {
+        self.score = score_with(&self.findings, &self.accepted);
     }
     /// True the first time a given situation is seen, so the same thing never notifies twice.
     fn first_time(&mut self, key: String) -> bool {
@@ -508,6 +516,12 @@ fn wifi_findings(v: &WifiView, real: &[AccessPoint], copies: &[AccessPoint], out
     }
 }
 
+/// The score counts only problems the user hasn't said are fine.
+fn score_with(findings: &[Finding], accepted: &[String]) -> u32 {
+    let open: Vec<Finding> = findings.iter().filter(|f| !accepted.contains(&finding_key(f))).cloned().collect();
+    score(&open)
+}
+
 fn score(findings: &[Finding]) -> u32 {
     let cost: u32 = findings.iter().map(|f| match f.level.as_str() { "fix-soon" => 25, "worth-fixing" => 10, _ => 0 }).sum();
     100u32.saturating_sub(cost)
@@ -708,7 +722,8 @@ fn risk_alerts(state: &mut State, previous: &HashSet<String>, findings: &[Findin
     if !state.baseline_done || !state.settings.notify {
         return;
     }
-    for f in findings.iter().filter(|f| level_order(&f.level) <= 1 && f.id != "PL-EVIL-TWIN") {
+    let accepted = state.accepted.clone();
+    for f in findings.iter().filter(|f| level_order(&f.level) <= 1 && f.id != "PL-EVIL-TWIN" && !accepted.contains(&finding_key(f))) {
         let key = finding_key(f);
         if !previous.contains(&key) && state.first_time(format!("finding:{key}")) {
             alerts.push(state.alert(if f.level == "fix-soon" { "urgent" } else { "warning" }, format!("New risk: {}", f.title), f.found.clone(), f.device.clone()));
@@ -870,9 +885,11 @@ fn watch_dns(state: &mut State, servers: &[String], alerts: &mut Vec<Alert>) {
 /// the check (a kick-off warning). `began` is when the copy was taken.
 pub fn keep_user_changes(work: &mut State, live: &State, began: u64) {
     work.settings = live.settings.clone();
+    work.accepted = live.accepted.clone();
     for (k, d) in work.devices.iter_mut() {
         if let Some(l) = live.devices.get(k) {
             d.custom_name = l.custom_name.clone();
+            d.owner = l.owner;
             if let Some(n) = &d.custom_name {
                 d.name = n.clone();
             }
@@ -930,7 +947,7 @@ pub fn check(state: &mut State, full: bool, progress: &dyn Fn(&str)) -> Vec<Aler
     let previous: HashSet<String> = state.findings.iter().map(finding_key).collect();
     let findings = all_findings(state, &real, &copies, extra);
     risk_alerts(state, &previous, &findings, &mut alerts);
-    state.score = score(&findings);
+    state.score = score_with(&findings, &state.accepted);
     state.findings = findings;
     state.last_check = t;
     let online = state.devices.values().filter(|d| d.online).count();
@@ -1357,6 +1374,27 @@ mod tests {
         assert_eq!(name_of(&d), "Saras-iPhone");
         d.custom_name = Some("Mum's phone".into());
         assert_eq!(name_of(&d), "Mum's phone");
+    }
+
+    #[test]
+    fn problems_the_user_accepted_dont_count() {
+        let mut s = watched();
+        s.accepted.push("PL-TELNET|k".into());
+        assert_eq!(score_with(&[telnet()], &s.accepted), 100);
+        let mut alerts = Vec::new();
+        risk_alerts(&mut s, &HashSet::new(), &[telnet()], &mut alerts);
+        assert!(alerts.is_empty());
+    }
+
+    #[test]
+    fn an_answer_given_during_a_check_is_kept() {
+        let mut work = watched();
+        work.devices.insert("k".into(), device("k", "02:aa:bb:cc:dd:01", "10.9.8.5"));
+        let mut live = work.clone();
+        live.devices.get_mut("k").unwrap().owner = Some(true);
+        live.accepted.push("PL-FTP|router".into());
+        keep_user_changes(&mut work, &live, 100);
+        assert_eq!((work.devices["k"].owner, work.accepted.len()), (Some(true), 1));
     }
 
     #[test]

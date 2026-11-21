@@ -1,4 +1,4 @@
-﻿# Porchlight
+# Porchlight
 
 **A security checkup for home and office networks, written so anyone can act on it.**
 It finds the devices on your network, looks for the problems that actually get homes and small offices into trouble,
@@ -9,7 +9,7 @@ Controls v8 safeguards.
 It looks; it never breaks in. Windows and Linux, no dependencies, no account, and nothing about you leaves your computer
 ([privacy notes](https://porchlight-beryl.vercel.app/privacy/)).
 
-**Website:** [porchlight-beryl.vercel.app](https://porchlight-beryl.vercel.app) Â· **Live demo** (a made-up home, nothing is scanned): [porchlight-beryl.vercel.app/demo](https://porchlight-beryl.vercel.app/demo/)
+**Website:** [porchlight-beryl.vercel.app](https://porchlight-beryl.vercel.app) · **Live demo** (a made-up home, nothing is scanned): [porchlight-beryl.vercel.app/demo](https://porchlight-beryl.vercel.app/demo/)
 
 ![A sample Porchlight report of a made-up home: a score of 60 out of 100, a note that one new device joined and one thing was fixed since last week, and a map of the network with each device coloured by what was found on it](docs/panel-sample.png)
 
@@ -17,9 +17,9 @@ It looks; it never breaks in. Windows and Linux, no dependencies, no account, an
 
 ## Porchlight for Windows: the app
 
-![The Porchlight app: a safety score, four things worth fixing, and a map of a home network with the router in the middle](docs/app-overview.png)
+![The Porchlight app saying "Your home is mostly safe", with the next step lit up and numbered, a new device asking "Is it yours?", and a small map of the home](docs/app-overview.png)
 
-**[Download Porchlight 0.6.0 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.0_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights).
+**[Download Porchlight 0.6.2 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.2_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights).
 
 A tray app written in Rust ([Tauri](https://tauri.app)) that keeps watching your home network in the background and
 sends a notification when something changes:
@@ -45,19 +45,24 @@ sends a notification when something changes:
 - A daily full checkup of every device: Telnet, FTP, SMBv1, Remote Desktop without NLA, open camera streams, Android
   debugging, Docker, VNC, and ports opened to the internet through UPnP.
 
+**One thing at a time.** The window opens on a plain sentence ("Your home is mostly safe.") and the single next
+thing to do, lit up, with numbered steps and how long it takes. "I did it, check again" runs the checkup again and
+tells you whether the fix worked; "It's fine, stop telling me" keeps something you chose on purpose out of your score
+and your alerts. A new device asks "Is it yours?", and one you don't recognise comes with the steps to send it away.
+
 The map stays readable up to about 75 devices (rings around the router, the ones that need attention closest) and
 works with the keyboard. The window passes an automated accessibility audit (axe-core, every view, light and dark).
 
 **Updates are signed.** Porchlight checks once a day and only installs an update when you choose, and only if its
 signature matches the key built into the app ([how signing works](docs/SIGNING.md)). The installer itself isn't
-code-signed by Microsoft yet, so SmartScreen may warn the first time (More info â†’ Run anyway).
+code-signed by Microsoft yet, so SmartScreen may warn the first time (More info → Run anyway).
 
 **Privacy:** no account, no analytics, no telemetry. Everything stays in two files on your computer
-(`%APPDATA%\com.aboutbeyrem.porchlight`); Settings â†’ Forget everything deletes them. The only connections that
+(`%APPDATA%\com.aboutbeyrem.porchlight`); Settings → Forget everything deletes them. The only connections that
 leave your network are a daily update check and one DNS test lookup for a made-up name, listed in the
 [privacy notes](https://porchlight-beryl.vercel.app/privacy/).
 
-**Testing it?** See [docs/BETA.md](docs/BETA.md). Settings â†’ Help â†’ Save diagnostic file writes an anonymised summary
+**Testing it?** See [docs/BETA.md](docs/BETA.md). Settings → Help → Save diagnostic file writes an anonymised summary
 (counts and check IDs, never names or addresses) to attach to an issue.
 
 Build it yourself from `app/`: install Rust, then `npx @tauri-apps/cli build`.
@@ -268,7 +273,7 @@ injection), and the panel's security (DNS rebinding, cross-site requests, consen
 
 The sample report is built by the real rules from a made-up home: `node scripts/make-demo.js`.
 
-The Windows app has 74 Rust tests (`cargo test` in `app/src-tauri`): the decisions behind every alert (router
+The Windows app has 76 Rust tests (`cargo test` in `app/src-tauri`): the decisions behind every alert (router
 impersonation, new devices, new risks, the first-look baseline, merging a finished check with what the user did
 meanwhile), the kick-off detector's timing rules, fake-copy clustering (second bands, extenders, invisible
 characters, a copy that tries to pass as the real network), Wi-Fi beacon parsing, DNS and mDNS message parsing,

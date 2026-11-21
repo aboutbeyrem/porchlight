@@ -305,6 +305,34 @@ fn rename_device(app: AppHandle, key: String, name: String) {
     publish(&app);
 }
 
+/// The answer to "Is this yours?".
+#[tauri::command]
+fn confirm_device(app: AppHandle, key: String, mine: bool) {
+    let shared = app.state::<Shared>();
+    if let Ok(mut s) = shared.state.lock() {
+        if let Some(d) = s.devices.get_mut(&key) {
+            d.owner = Some(mine);
+        }
+        s.save(&shared.path);
+    }
+    publish(&app);
+}
+
+/// "It's fine, stop telling me" (or undo it). `key` is "ID|device".
+#[tauri::command]
+fn accept_finding(app: AppHandle, key: String, accept: bool) {
+    let shared = app.state::<Shared>();
+    if let Ok(mut s) = shared.state.lock() {
+        s.accepted.retain(|k| k != &key);
+        if accept {
+            s.accepted.push(key);
+        }
+        s.refresh_score();
+        s.save(&shared.path);
+    }
+    publish(&app);
+}
+
 #[tauri::command]
 fn forget_device(app: AppHandle, key: String) {
     let shared = app.state::<Shared>();
@@ -449,7 +477,7 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .invoke_handler(tauri::generate_handler![get_state, visible_networks, start_watching, check_now, rename_device, forget_device, accept_router, set_home_here, set_settings, mark_read, forget_everything, check_update, install_update, open_link, export_diagnostics])
+        .invoke_handler(tauri::generate_handler![get_state, visible_networks, start_watching, check_now, rename_device, forget_device, accept_router, set_home_here, set_settings, mark_read, forget_everything, confirm_device, accept_finding, check_update, install_update, open_link, export_diagnostics])
         .run(tauri::generate_context!())
         .expect("error while running Porchlight");
 }
