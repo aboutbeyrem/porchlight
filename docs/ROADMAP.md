@@ -6,13 +6,14 @@ Every idea has to pass Porchlight's one rule: **it looks; it never breaks in.** 
 guessing, no pushing devices off the network, nothing sent anywhere the user didn't choose. Ideas that would break
 the rule are listed at the end with the reason.
 
-Started 22 November 2026. ★ marks the ones that would make the biggest difference to a family on day one.
+Started 22 November 2026.
+
+**Decided so far:** phone apps come next (from 23 November 2026). The Raspberry Pi watcher has to be one-click. No
+Telegram bot. ★ marks the ones that would make the biggest difference to a family on day one.
 
 ## Alerts wherever you are
 
 - ★ **Phone apps** (Android first, then iPhone): alerts on your phone, and a view of who's home. Planned next.
-- ★ **Telegram and Discord alerts**: a bot sends Porchlight's alerts to a chat you choose. Free, works on every phone
-  today, and most families already have Telegram.
 - **ntfy alerts**: the same through the free ntfy app, for people who want no account at all.
 - **Weekly summary**: one calm notification on Sunday evening. "This week: 2 new devices, both yours. Nothing
   risky."
@@ -80,8 +81,14 @@ Started 22 November 2026. ★ marks the ones that would make the biggest differe
 
 ## Everywhere
 
-- ★ **Porchlight Box**: the watcher on a Raspberry Pi or an old Android phone, so the home is watched 24/7 without a
-  PC switched on.
+- ★ **Porchlight Box, set up in one click**: the watcher on a Raspberry Pi (or an old Android phone), so the home is
+  watched 24/7 without a PC switched on. Setting it up must be one click, no terminal:
+  - a ready-made Porchlight image listed in Raspberry Pi Imager: pick it, pick the SD card, write. Imager asks for
+    the Wi-Fi name and password on the way, so the Pi joins the network by itself;
+  - or, for a Pi that's already running, one button in the Windows app: "Set up a Porchlight Box" finds the Pi on the
+    network and installs everything for you;
+  - the Box shows up in the Windows app and the phone app with a QR code to pair, then updates itself (signed, like
+    the app).
 - **Mac and Linux** versions (Tauri already supports both).
 - **More languages**: Spanish, German, Turkish, Italian next. The translation system is already in place.
 
@@ -93,6 +100,8 @@ Started 22 November 2026. ★ marks the ones that would make the biggest differe
 - **An outside security review** of Porchlight itself.
 
 ## Ideas we won't do, and why
+
+- **Telegram alerts**: dropped by choice. Phone alerts come through Porchlight's own apps (and ntfy until then).
 
 - **Kicking a device off the network** (ARP spoofing or deauthentication): that's an attack, even when it's aimed at
   an intruder. Porchlight shows how to remove the device from the router instead.
