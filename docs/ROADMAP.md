@@ -9,7 +9,9 @@ the rule are listed at the end with the reason.
 Started 22 November 2026.
 
 **Decided so far:** phone apps come next (from 23 November 2026). The Raspberry Pi watcher has to be one-click. No
-Telegram bot. ★ marks the ones that would make the biggest difference to a family on day one.
+Telegram bot.
+
+★ marks the ones that would make the biggest difference to a family on day one.
 
 ## Alerts wherever you are
 
