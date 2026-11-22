@@ -210,6 +210,11 @@ Add `--json` for a machine-readable report, `--no-history` to skip remembering d
 rights needed.
 **Linux** uses `ip`, `iw` and `nmcli` (NetworkManager), which most desktops already have.
 
+## What's next
+
+Ideas for coming versions, from phone alerts to Wi-Fi channel advice and a 24/7 Raspberry Pi watcher, are in
+[docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Honest limits
 
 - **It's a first-line checkup, not a certified compliance scanner or a penetration test.** It finds common, fixable
