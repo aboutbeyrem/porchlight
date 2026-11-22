@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { LANGS, ROWS } from "./site-i18n.mjs";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
 const out = path.join(root, ".site-build");
@@ -45,6 +46,33 @@ if (url) {
   html = html.replace(`<meta property="og:image" content="panel-sample.png">`, `<meta property="og:image" content="${url}/panel-sample.png">\n  <meta property="og:url" content="${url}/">\n  <link rel="canonical" href="${url}/">`);
   fs.writeFileSync(path.join(out, "index.html"), html);
 }
+// French and Arabic pages, built from the English one with scripts/site-i18n.mjs.
+const langCodes = ["en", ...Object.keys(LANGS)];
+const pageUrl = (code) => `${url}/${code === "en" ? "" : code + "/"}`;
+const alternates = url ? langCodes.map((c) => `<link rel="alternate" hreflang="${c}" href="${pageUrl(c)}">`).concat(`<link rel="alternate" hreflang="x-default" href="${url}/">`).join("\n  ") : "";
+const english = html;
+if (alternates) {
+  html = html.replace(`<link rel="canonical" href="${url}/">`, `<link rel="canonical" href="${url}/">\n  ${alternates}`);
+  fs.writeFileSync(path.join(out, "index.html"), html);
+}
+for (const [i, code] of Object.keys(LANGS).entries()) {
+  let page = english;
+  for (const row of ROWS) {
+    const [en, tr] = [row[0].replaceAll("{VERSION}", version), row[i + 1].replaceAll("{VERSION}", version)];
+    if (!page.includes(en)) throw new Error(`${code}: English text not found, update scripts/site-i18n.mjs: ${en.slice(0, 80)}`);
+    page = page.replaceAll(en, tr);
+  }
+  page = page
+    .replace('<html lang="en">', `<html lang="${code}" dir="${LANGS[code].dir}">`)
+    .replace('lang="en" hreflang="en" aria-current="true"', 'lang="en" hreflang="en"')
+    .replace(`lang="${code}" hreflang="${code}"`, `lang="${code}" hreflang="${code}" aria-current="true"`)
+    .replaceAll('href="site.css"', 'href="/site.css"').replaceAll('src="site.js"', 'src="/site.js"')
+    .replaceAll('src="app-overview.png"', 'src="/app-overview.png"').replaceAll('src="panel-sample.png"', 'src="/panel-sample.png"');
+  if (url) page = page.replace(`<meta property="og:url" content="${url}/">\n  <link rel="canonical" href="${url}/">`, `<meta property="og:url" content="${pageUrl(code)}">\n  <link rel="canonical" href="${pageUrl(code)}">\n  ${alternates}`);
+  fs.mkdirSync(path.join(out, code), { recursive: true });
+  fs.writeFileSync(path.join(out, code, "index.html"), page);
+}
+
 let demo = fs.readFileSync(path.join(out, "demo", "index.html"), "utf8");
 demo = demo.replace(`<a href="/">Check your own network</a>`, `<a href="/#run">Get Porchlight to check your own network</a>`);
 demo = demo.replace("<title>Porchlight</title>", "<title>Porchlight demo: a sample report of a made-up home</title>\n  <meta name=\"robots\" content=\"noindex\">");

@@ -257,3 +257,16 @@ footer { margin-top: 110px; padding: 28px 0 44px; border-top: 1px solid var(--li
 .doc-body li b, .doc-body p b { color: var(--ink); }
 .doc-body p { color: var(--ink-2); }
 .doc-body .muted { margin-top: 40px; font-size: 0.92rem; }
+
+/* Languages: the switcher, and right-to-left layout for Arabic (code and commands stay left-to-right). */
+.langs { display: inline-flex; gap: 10px; padding-inline-start: 10px; border-inline-start: 1px solid rgba(255, 255, 255, 0.18); }
+.langs a[aria-current] { color: var(--on-night); font-weight: 700; }
+html[dir="rtl"] .chip, html[dir="rtl"] .found, html[dir="rtl"] .parts button, html[dir="rtl"] .card-demo { text-align: right; }
+html[dir="rtl"] .found, html[dir="rtl"] .card-demo { border-left: 0; border-right: 5px solid var(--worth); }
+html[dir="rtl"] .card-demo ol, html[dir="rtl"] .run, html[dir="rtl"] .limits, html[dir="rtl"] .doc-body ul { padding-left: 0; padding-right: 20px; }
+html[dir="rtl"] .copy { right: auto; left: 10px; }
+html[dir="rtl"] .copy .i-done { left: auto; right: 10px; }
+html[dir="rtl"] pre, html[dir="rtl"] .term, html[dir="rtl"] code, html[dir="rtl"] .hash, html[dir="rtl"] .found-id { direction: ltr; unicode-bidi: isolate; }
+html[dir="rtl"] pre, html[dir="rtl"] .term { text-align: left; }
+html[lang="ar"] body { line-height: 1.75; }
+html[lang="ar"] .headline, html[lang="ar"] .title { letter-spacing: 0; line-height: 1.3; }

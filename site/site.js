@@ -104,20 +104,24 @@
     light("found");
   }
 
-  // ---- Copy button: icon swaps to a check for a moment.
+  // ---- Copy button: icon swaps to a check for a moment. Its words follow the page language.
+  const WORDS = ({
+    fr: { copy: "Copier", copied: "Copié", select: "Sélectionnez et copiez" },
+    ar: { copy: "نسخ", copied: "تم النسخ", select: "حدّد وانسخ" },
+  })[document.documentElement.lang] || { copy: "Copy", copied: "Copied", select: "Select and copy" };
   for (const btn of document.querySelectorAll("[data-copy]")) {
     btn.addEventListener("click", async () => {
       const text = document.getElementById(btn.dataset.copy)?.textContent || "";
       try {
         await navigator.clipboard.writeText(text);
         btn.classList.add("done");
-        btn.querySelector(".copy-label").textContent = "Copied";
+        btn.querySelector(".copy-label").textContent = WORDS.copied;
         setTimeout(() => {
           btn.classList.remove("done");
-          btn.querySelector(".copy-label").textContent = "Copy";
+          btn.querySelector(".copy-label").textContent = WORDS.copy;
         }, 1600);
       } catch {
-        btn.querySelector(".copy-label").textContent = "Select and copy";
+        btn.querySelector(".copy-label").textContent = WORDS.select;
       }
     });
   }
