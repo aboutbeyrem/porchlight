@@ -19,7 +19,7 @@ It looks; it never breaks in. Windows and Linux, no dependencies, no account, an
 
 ![The Porchlight app saying "Your home is mostly safe", with the next step lit up and numbered, a new device asking "Is it yours?", and a small map of the home](docs/app-overview.png)
 
-**[Download Porchlight 0.6.4 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.4_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights). In English, French and Arabic: it follows Windows, or pick one in Settings.
+**[Download Porchlight 0.6.5 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.5_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights). In English, French and Arabic: it follows Windows, or pick one in Settings.
 
 A tray app written in Rust ([Tauri](https://tauri.app)) that keeps watching your home network in the background and
 sends a notification when something changes:
@@ -57,8 +57,11 @@ The map stays readable up to about 75 devices (rings around the router, the ones
 works with the keyboard. The window passes an automated accessibility audit (axe-core, every view, light and dark).
 
 **Updates are signed.** Porchlight checks once a day and only installs an update when you choose, and only if its
-signature matches the key built into the app ([how signing works](docs/SIGNING.md)). The installer itself isn't
-code-signed by Microsoft yet, so SmartScreen may warn the first time (More info → Run anyway).
+signature matches the key built into the app ([how signing works](docs/SIGNING.md)). The app and installer are
+code-signed by the author (certificate thumbprint `6250EBA6F952FFD7AAB36CC154ECC1DB1CA1C486`, public half in
+[docs/porchlight-codesign.cer](docs/porchlight-codesign.cer)), so you can check that nothing changed after release.
+The certificate is self-signed, not from an authority Windows already trusts, so SmartScreen may still warn the
+first time (More info → Run anyway).
 
 **Privacy:** no account, no analytics, no telemetry. Everything stays in two files on your computer
 (`%APPDATA%\com.aboutbeyrem.porchlight`); Settings → Forget everything deletes them. The only connections that

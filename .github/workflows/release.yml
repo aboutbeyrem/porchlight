@@ -8,9 +8,9 @@ name: Release
 #   Repository Settings -> Secrets and variables -> Actions -> New repository secret
 #     TAURI_SIGNING_PRIVATE_KEY           = contents of %USERPROFILE%\.tauri\porchlight-updater.key
 #     TAURI_SIGNING_PRIVATE_KEY_PASSWORD  = contents of %USERPROFILE%\.tauri\porchlight-updater.password
+# Run by hand for now (Actions -> Release -> Run workflow): releases are built and code-signed on the maintainer's
+# PC, where the signing certificate is, and a tag-triggered build would replace those signed files with unsigned ones.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
