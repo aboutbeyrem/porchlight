@@ -1,0 +1,55 @@
+name: Release
+
+# Pushing a tag like v0.6.4 builds the Windows installer on GitHub's own machines from the public source, signs
+# the update with Porchlight's update key, and attaches the installer to a GitHub Release. Building in the open
+# like this is what SignPath (free code signing for open source) requires before it signs the installer.
+#
+# One-time setup by the maintainer (never paste these into code or chat):
+#   Repository Settings -> Secrets and variables -> Actions -> New repository secret
+#     TAURI_SIGNING_PRIVATE_KEY           = contents of %USERPROFILE%\.tauri\porchlight-updater.key
+#     TAURI_SIGNING_PRIVATE_KEY_PASSWORD  = contents of %USERPROFILE%\.tauri\porchlight-updater.password
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: Test before building
+        working-directory: app/src-tauri
+        run: cargo test --locked
+      - name: Build the installer
+        working-directory: app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx -y @tauri-apps/cli@2 build
+      # Once SignPath accepts the project, its signing step goes here (it signs the .exe before upload).
+      # See docs/SIGNING.md.
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem app/src-tauri/target/release/bundle/nsis/*.exe | ForEach-Object {
+            "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content -Encoding utf8 SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            app/src-tauri/target/release/bundle/nsis/*.exe
+            app/src-tauri/target/release/bundle/nsis/*.exe.sig
+            SHA256SUMS.txt
