@@ -38,8 +38,19 @@ struct Shared {
     update: Mutex<Option<String>>,
 }
 
+/// Opens the window, creating it the first time. Porchlight runs without a window (and without its web engine)
+/// until someone opens it, so a slow or stuck web engine can never stop the watching.
 fn show_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
+    let window = match app.get_webview_window("main") {
+        Some(w) => Some(w),
+        None => app.config().app.windows.iter().find(|w| w.label == "main").and_then(|cfg| {
+            tauri::WebviewWindowBuilder::from_config(app, cfg)
+                .and_then(|b| b.build())
+                .map_err(|e| log_warn!("couldn't open the window: {e}"))
+                .ok()
+        }),
+    };
+    if let Some(w) = window {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
@@ -405,6 +416,11 @@ fn forget_everything(app: AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Start the log before anything else, so even a start that never finishes leaves a trace.
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        log::init(std::path::PathBuf::from(appdata).join("com.aboutbeyrem.porchlight"));
+        log_info!("process started (pid {}, args: {:?})", std::process::id(), std::env::args().skip(1).collect::<Vec<_>>());
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_notification::init())

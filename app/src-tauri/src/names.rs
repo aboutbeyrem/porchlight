@@ -131,6 +131,17 @@ pub fn mdns_name(ip: Ipv4Addr) -> Option<String> {
     clean_host(&ptr_answer(&buf[..n])?)
 }
 
+/// The time-to-live in a ping reply: 64 for Android, iPhone, Mac and Linux, 128 for Windows. "TTL=" reads the
+/// same in every Windows language.
+pub fn parse_ttl(text: &str) -> Option<u8> {
+    let at = text.find("TTL=").or_else(|| text.find("ttl="))? + 4;
+    text[at..].chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok()
+}
+
+pub fn ping_ttl(ip: Ipv4Addr) -> Option<u8> {
+    parse_ttl(&net::run("ping", &["-n", "1", "-w", "800", &ip.to_string()]))
+}
+
 /// The name a device gave the router when it joined (DHCP), from the router's own DNS. Most home routers answer
 /// this for every device they handed an address to, including phones that announce nothing else.
 pub fn router_name(ip: Ipv4Addr, router: Ipv4Addr) -> Option<String> {
@@ -470,6 +481,13 @@ mod tests {
         b.extend_from_slice(&[0, target.len() as u8]);
         b.extend_from_slice(&target);
         assert_eq!(ptr_answer(&b), Some("sara-iphone.local".into()));
+    }
+
+    #[test]
+    fn ping_replies_give_their_ttl() {
+        assert_eq!(parse_ttl("Reply from 10.9.8.5: bytes=32 time=3ms TTL=64"), Some(64));
+        assert_eq!(parse_ttl("Réponse de 10.9.8.5 : octets=32 temps<1ms TTL=128"), Some(128));
+        assert_eq!(parse_ttl("Request timed out."), None);
     }
 
     #[test]

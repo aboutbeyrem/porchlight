@@ -52,6 +52,27 @@ pub fn find_network() -> Option<Network> {
     Some(Network { address, gateway, cidr: format!("{}.{}.{}.0/24", o[0], o[1], o[2]) })
 }
 
+/// This computer's own addresses, from `route print -4`: the host routes (mask 255.255.255.255) whose destination is
+/// their own interface. Numbers only, so it reads the same in every Windows language.
+pub fn parse_local_addresses(text: &str) -> Vec<Ipv4Addr> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let p: Vec<&str> = line.split_whitespace().collect();
+        if p.len() >= 4 && p[1] == "255.255.255.255" && p[0] == p[3] {
+            if let Ok(ip) = p[0].parse::<Ipv4Addr>() {
+                if !ip.is_loopback() && !out.contains(&ip) {
+                    out.push(ip);
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn local_addresses() -> Vec<Ipv4Addr> {
+    parse_local_addresses(&run("route", &["print", "-4"]))
+}
+
 pub fn hosts(net: &Network) -> Vec<Ipv4Addr> {
     let o = net.address.octets();
     (1..=254u8).map(|i| Ipv4Addr::new(o[0], o[1], o[2], i)).filter(|ip| *ip != net.address).collect()
@@ -170,6 +191,13 @@ mod tests {
     fn default_route_lowest_metric_wins() {
         let text = "  0.0.0.0  0.0.0.0  10.0.0.1  10.0.0.23  50\n  0.0.0.0  0.0.0.0  192.168.50.1  192.168.50.7  25\n";
         assert_eq!(parse_default_route(text), Some(("192.168.50.1".parse().unwrap(), "192.168.50.7".parse().unwrap())));
+    }
+
+    #[test]
+    fn this_computers_addresses_are_read_from_host_routes() {
+        let text = "  10.9.8.20  255.255.255.255  On-link  10.9.8.20  281\n  127.0.0.1  255.255.255.255  On-link  127.0.0.1  331\n  10.9.8.0  255.255.255.0  On-link  10.9.8.20  281\n  192.168.56.1  255.255.255.255  Sur le lien  192.168.56.1  281\n";
+        let got = parse_local_addresses(text);
+        assert_eq!(got, vec!["10.9.8.20".parse::<Ipv4Addr>().unwrap()]);
     }
 
     #[test]

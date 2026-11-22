@@ -45,6 +45,8 @@ pub struct Device {
     pub naming: u32,
     /// The user's answer to "Is this yours?": Some(true) ours, Some(false) not recognised, None not asked yet.
     pub owner: Option<bool>,
+    /// Ping reply TTL, asked only of devices that announce no name: a hint at what they are.
+    pub ttl: Option<u8>,
     pub deep: Option<DeepResult>,
 }
 
@@ -191,12 +193,22 @@ impl State {
 }
 
 // ---------- device names and kinds ----------
+/// This computer seen through another of its connections (Wi-Fi and Ethernet both on, for example): it answers
+/// with this computer's own name.
+fn is_this_pc(d: &Device) -> bool {
+    let Ok(me) = std::env::var("COMPUTERNAME") else { return false };
+    [&d.detected_name, &d.router_name].into_iter().flatten().any(|n| n.eq_ignore_ascii_case(&me))
+}
+
 fn kind_of(d: &Device) -> String {
     if d.is_router {
         return "router".into();
     }
     if d.is_self {
         return "this computer".into();
+    }
+    if is_this_pc(d) {
+        return "this computer (another connection)".into();
     }
     let text = [&d.upnp_name, &d.service_name, &d.detected_name, &d.router_name, &d.web_title, &d.vendor].iter().filter_map(|n| n.as_deref()).collect::<Vec<_>>().join(" ").to_lowercase();
     let ports = d.deep.as_ref().map(|x| x.ports.clone()).unwrap_or_default();
@@ -224,6 +236,12 @@ fn kind_of(d: &Device) -> String {
     }
     if has(&["desktop-", "laptop-", "raspberry", "-pc", "pc-", "macbook", "imac", "thinkpad", "notebook"]) || ports.contains(&3389) || ports.contains(&445) {
         return "computer".into();
+    }
+    // Nothing announced: how it answers a ping is the last hint.
+    match d.ttl {
+        Some(t) if t > 64 && t <= 128 => return "Windows computer".into(),
+        Some(t) if t > 32 && t <= 64 => return "phone, tablet or Mac".into(),
+        _ => {}
     }
     // Only now, when nothing says what it is: the extender hides its maker, so this is all we know.
     if d.behind_repeater {
@@ -261,8 +279,8 @@ fn cap(s: &str) -> String {
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
 }
 
-/// Bumped when Porchlight learns a new way to find names (2: router DNS and advertised service names).
-const NAMING: u32 = 2;
+/// Bumped when Porchlight learns a new way to find names (2: router DNS and service names; 3: ping hint).
+const NAMING: u32 = 3;
 
 /// The name a device announces about itself, best source first (not counting a name the user gave it).
 fn own_name(d: &Device) -> Option<&str> {
@@ -288,6 +306,9 @@ fn refresh_names(d: &mut Device, upnp: &HashMap<Ipv4Addr, Upnp>, router: Ipv4Add
             d.router_name = names::router_name(ip, router).or(d.router_name.take());
         }
         d.web_title = names::web_title(ip).or(d.web_title.take());
+        if own_name(d).is_none() && !d.is_router {
+            d.ttl = names::ping_ttl(ip).or(d.ttl);
+        }
         d.names_checked = t;
         d.naming = NAMING;
     }
@@ -673,6 +694,9 @@ fn new_device_alerts(state: &mut State, fresh: &[String], alerts: &mut Vec<Alert
     }
     for k in fresh {
         let Some(d) = state.devices.get(k).cloned() else { continue };
+        if is_this_pc(&d) {
+            continue;
+        }
         let doors = d.deep.as_ref().filter(|x| !x.ports.is_empty()).map(|x| format!(" Open doors: {}.", x.ports.iter().map(|p| checks::port_name(*p)).collect::<Vec<_>>().join(", "))).unwrap_or_default();
         let who = if d.name.eq_ignore_ascii_case(&d.kind) { format!("A {} ({})", d.kind, d.ip) } else { format!("{} ({}, {})", d.name, d.kind, d.ip) };
         alerts.push(state.alert("warning", format!("New device: {}", d.name), format!("{who} joined your network.{doors} If you don't recognise it, change your Wi-Fi password."), Some(k.clone())));
@@ -680,8 +704,14 @@ fn new_device_alerts(state: &mut State, fresh: &[String], alerts: &mut Vec<Alert
 }
 
 fn mapping_findings(state: &State, out: &mut Vec<Finding>) {
+    // A mapping to any of this computer's addresses (a second adapter, a virtual network) belongs to this computer.
+    let mine: Vec<String> = if state.mappings.is_empty() { Vec::new() } else { net::local_addresses().iter().map(|ip| ip.to_string()).collect() };
     for m in &state.mappings {
-        let name = state.devices.values().find(|d| d.ip == m.internal_client).map(|d| d.name.clone()).unwrap_or_else(|| m.internal_client.clone());
+        let name = if mine.contains(&m.internal_client) {
+            format!("This computer ({})", m.internal_client)
+        } else {
+            state.devices.values().find(|d| d.ip == m.internal_client).map(|d| d.name.clone()).unwrap_or_else(|| m.internal_client.clone())
+        };
         let sensitive = [21, 23, 80, 554, 8000, 8080, 8554, 34567, 37777, 3389, 5900].contains(&m.internal_port);
         out.push(Finding { id: "PL-UPNP-MAPPING".into(), level: if sensitive { "fix-soon" } else { "worth-fixing" }.into(), title: "A device opened a door to the internet by itself".into(),
             found: format!("{name} asked your router to open port {} ({}) to the internet{}.", m.external_port, m.protocol, if m.description.is_empty() { String::new() } else { format!(", labelled \"{}\"", m.description) }),
@@ -760,7 +790,9 @@ fn set_baseline(state: &mut State, t: u64, alerts: &mut Vec<Alert>) {
 fn look_at_home(state: &mut State, netw: &Network, survey: &Survey, full: bool, t: u64, progress: &dyn Fn(&str), alerts: &mut Vec<Alert>) -> Vec<Finding> {
     progress("Looking for devices");
     let swept = std::time::Instant::now();
-    let found = net::sweep(&net::hosts(netw));
+    // Other addresses of this computer (a second adapter, a virtual machine's network) are not visitors.
+    let mine = net::local_addresses();
+    let found: Vec<(Ipv4Addr, [u8; 6])> = net::sweep(&net::hosts(netw)).into_iter().filter(|(ip, _)| !mine.contains(ip)).collect();
     let upnp = names::ssdp(netw);
     crate::log_info!("sweep: {} answers, {} UPnP devices in {:.1}s", found.len(), upnp.len(), swept.elapsed().as_secs_f32());
     watch_router(state, &found, netw.gateway, alerts);
@@ -1357,6 +1389,28 @@ mod tests {
     fn a_silent_device_behind_the_extender_says_where_it_is() {
         let d = Device { behind_repeater: true, ..Default::default() };
         assert_eq!(kind_of(&d), "device on your extender");
+    }
+
+    #[test]
+    fn a_silent_device_answering_like_windows_is_a_windows_computer() {
+        let d = Device { ttl: Some(128), private_mac: true, ..Default::default() };
+        assert_eq!(kind_of(&d), "Windows computer");
+    }
+
+    #[test]
+    fn a_silent_device_answering_like_a_phone_is_labelled_so_even_behind_the_extender() {
+        let d = Device { ttl: Some(64), behind_repeater: true, ..Default::default() };
+        assert_eq!(kind_of(&d), "phone, tablet or Mac");
+    }
+
+    #[test]
+    fn this_computer_on_another_connection_is_not_a_new_device() {
+        let me = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "TESTPC".into());
+        let mut s = watched();
+        s.devices.insert("k".into(), Device { router_name: Some(me), ..device("k", "02:aa:bb:cc:dd:01", "10.9.8.8") });
+        let mut alerts = Vec::new();
+        new_device_alerts(&mut s, &["k".into()], &mut alerts);
+        assert!(alerts.is_empty() || std::env::var("COMPUTERNAME").is_err());
     }
 
     #[test]

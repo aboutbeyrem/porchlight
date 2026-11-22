@@ -29,7 +29,7 @@ if (fs.existsSync(installer)) {
   const sig = installer + ".sig";
   if (url && fs.existsSync(sig)) {
     fs.mkdirSync(path.join(out, "updates"), { recursive: true });
-    const notes = "A clearer Porchlight: one next step at a time, \"Is this yours?\" for new devices, and a check that your fix worked.";
+    const notes = "Keeps watching reliably after Windows starts or an update, smarter labels for devices that announce no name, and your own PC is no longer a new device.";
     const manifest = { version, notes, pub_date: new Date().toISOString().replace(/\.\d+Z$/, "Z"), platforms: { "windows-x86_64": { signature: fs.readFileSync(sig, "utf8").trim(), url: `${url}/download/${installerName}` } } };
     fs.writeFileSync(path.join(out, "updates", "latest.json"), JSON.stringify(manifest, null, 2));
   }
@@ -74,6 +74,6 @@ const headers = [
   { key: "X-Frame-Options", value: "DENY" },
 ];
 // Links to older installers (in posts, READMEs) lead to the current one.
-const redirects = ["0.5.0", "0.6.0", "0.6.1"].filter((v) => v !== version).map((v) => ({ source: `/download/Porchlight_${v}_x64-setup.exe`, destination: `/download/${installerName}`, permanent: false }));
+const redirects = ["0.5.0", "0.6.0", "0.6.1", "0.6.2"].filter((v) => v !== version).map((v) => ({ source: `/download/Porchlight_${v}_x64-setup.exe`, destination: `/download/${installerName}`, permanent: false }));
 fs.writeFileSync(path.join(out, "vercel.json"), JSON.stringify({ cleanUrls: true, trailingSlash: true, redirects, headers: [{ source: "/(.*)", headers }] }, null, 2));
 console.log(`Built ${out}${url ? ` for ${url}` : ""} (${inline.length} inline script allowed by hash)`);

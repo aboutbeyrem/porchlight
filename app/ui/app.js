@@ -141,7 +141,7 @@ const worstFor = (key) => {
 };
 const announced = (d) => d.customName || d.upnpName || d.serviceName || d.detectedName || d.webTitle || d.routerName;
 const isNew = (d) => S.baselineAt && !d.isSelf && d.firstSeen > S.baselineAt && Date.now() / 1000 - d.firstSeen < 7 * 86400;
-const atTheDoor = () => Object.values(S.devices).filter((d) => d.online && !d.isSelf && !d.isRouter && ((d.owner == null && isNew(d)) || d.owner === false || naming === d.key));
+const atTheDoor = () => Object.values(S.devices).filter((d) => d.online && !d.isSelf && !d.isRouter && !d.kind.startsWith("this computer") && ((d.owner == null && isNew(d)) || d.owner === false || naming === d.key));
 
 // ---------- toast ----------
 let toastTimer = 0;
