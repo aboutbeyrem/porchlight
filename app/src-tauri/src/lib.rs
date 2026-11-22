@@ -3,12 +3,15 @@
 
 mod checks;
 mod guard;
+mod i18n;
 #[macro_use]
 mod log;
 mod names;
 mod net;
 mod system;
 mod wifi;
+
+use crate::i18n::Lang;
 
 use guard::State;
 use std::path::PathBuf;
@@ -65,6 +68,7 @@ fn snapshot(app: &AppHandle) -> serde_json::Value {
     v["listening"] = serde_json::Value::Bool(shared.listening.load(Ordering::SeqCst));
     v["progress"] = serde_json::Value::String(shared.progress.lock().map(|p| p.clone()).unwrap_or_default());
     v["autostart"] = serde_json::Value::Bool(app.autolaunch().is_enabled().unwrap_or(false));
+    v["lang"] = serde_json::Value::String(state.lang().code().into());
     v["appVersion"] = serde_json::Value::String(env!("CARGO_PKG_VERSION").into());
     v["update"] = shared.update.lock().ok().and_then(|u| u.clone()).map(serde_json::Value::String).unwrap_or_default();
     v
@@ -102,7 +106,9 @@ fn watch_updates(app: AppHandle) {
                 u.clone_from(&found);
             }
             if let Some(v) = found.filter(|v| told.as_ref() != Some(v)) {
-                let _ = app.notification().builder().title(format!("Porchlight {v} is ready")).body("Open Porchlight and choose Install update. It takes a few seconds.").show();
+                let l = app.state::<Shared>().state.lock().map(|s| s.lang()).unwrap_or_default();
+                let _ = app.notification().builder().title(tx!(l, format!("Porchlight {v} is ready"), format!("Porchlight {v} est prêt"), format!("Porchlight {v} جاهز")))
+                    .body(tx!(l, "Open Porchlight and choose Install update. It takes a few seconds.", "Ouvrez Porchlight et choisissez Installer la mise à jour. Cela prend quelques secondes.", "افتح Porchlight واختر تثبيت التحديث. يستغرق ذلك بضع ثوانٍ.")).show();
                 told = Some(v);
             }
             publish(&app);
@@ -204,7 +210,7 @@ fn run_check(app: &AppHandle, full: bool) {
 
 /// Shows up to four notifications, then one that sums up the rest.
 fn notify(app: &AppHandle, alerts: &[guard::Alert]) {
-    let on = app.state::<Shared>().state.lock().map(|s| s.settings.notify).unwrap_or(true);
+    let (on, l) = app.state::<Shared>().state.lock().map(|s| (s.settings.notify, s.lang())).unwrap_or((true, Lang::En));
     if !on || alerts.is_empty() {
         return;
     }
@@ -214,7 +220,10 @@ fn notify(app: &AppHandle, alerts: &[guard::Alert]) {
         }
     }
     if alerts.len() > 4 {
-        let _ = app.notification().builder().title("Porchlight").body(format!("{} more things to look at. Open Porchlight to see them.", alerts.len() - 4)).show();
+        let _ = app.notification().builder().title("Porchlight").body({
+            let n = alerts.len() - 4;
+            tx!(l, format!("{n} more things to look at. Open Porchlight to see them."), format!("{n} autres points à voir. Ouvrez Porchlight pour les consulter."), format!("{n} أمور أخرى تستحق النظر. افتح Porchlight لرؤيتها."))
+        }).show();
     }
 }
 
@@ -379,9 +388,15 @@ fn set_home_here(app: AppHandle) {
 }
 
 #[tauri::command]
-fn set_settings(app: AppHandle, interval_min: u32, notify: bool, home_ssid: Option<String>, autostart: bool) {
+fn set_settings(app: AppHandle, interval_min: u32, notify: bool, home_ssid: Option<String>, autostart: bool, lang: Option<String>) {
     let shared = app.state::<Shared>();
+    let mut relabel = None;
     if let Ok(mut s) = shared.state.lock() {
+        let lang = lang.filter(|x| matches!(x.as_str(), "en" | "fr" | "ar"));
+        if lang != s.settings.lang {
+            s.settings.lang = lang;
+            relabel = Some(s.lang());
+        }
         s.settings.interval_min = interval_min.clamp(2, 240);
         s.settings.notify = notify;
         s.settings.home_ssid = home_ssid.filter(|x| !x.is_empty());
@@ -389,6 +404,20 @@ fn set_settings(app: AppHandle, interval_min: u32, notify: bool, home_ssid: Opti
     }
     let _ = if autostart { app.autolaunch().enable() } else { app.autolaunch().disable() };
     publish(&app);
+    // A new language: relabel the tray and look again, so every finding is rewritten in it.
+    if let Some(l) = relabel {
+        if let (Some(tray), Ok(menu)) = (app.tray_by_id("main"), tray_menu(&app, l)) {
+            let _ = tray.set_menu(Some(menu));
+        }
+        trigger(&app, false);
+    }
+}
+
+fn tray_menu(app: &AppHandle, l: Lang) -> tauri::Result<Menu<tauri::Wry>> {
+    let open = MenuItem::with_id(app, "open", tx!(l, "Open Porchlight", "Ouvrir Porchlight", "فتح Porchlight"), true, None::<&str>)?;
+    let check = MenuItem::with_id(app, "check", tx!(l, "Check now", "Vérifier maintenant", "افحص الآن"), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", tx!(l, "Quit Porchlight", "Quitter Porchlight", "إنهاء Porchlight"), true, None::<&str>)?;
+    Menu::with_items(app, &[&open, &check, &quit])
 }
 
 #[tauri::command]
@@ -436,10 +465,8 @@ pub fn run() {
             app.manage(Shared { state: Mutex::new(state), path, trigger: Mutex::new(tx), busy: AtomicBool::new(false), listening: AtomicBool::new(false), progress: Mutex::new(String::new()), update: Mutex::new(None) });
 
             // Tray: Porchlight keeps watching when the window is closed.
-            let open = MenuItem::with_id(app, "open", "Open Porchlight", true, None::<&str>)?;
-            let check = MenuItem::with_id(app, "check", "Check now", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit Porchlight", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &check, &quit])?;
+            let l = app.state::<Shared>().state.lock().map(|s| s.lang()).unwrap_or_default();
+            let menu = tray_menu(app.handle(), l)?;
             let mut tray = TrayIconBuilder::with_id("main").tooltip("Porchlight").menu(&menu).show_menu_on_left_click(false);
             if let Some(icon) = app.default_window_icon() {
                 tray = tray.icon(icon.clone());

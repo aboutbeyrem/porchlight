@@ -103,10 +103,10 @@ button, select, input { font: inherit; color: inherit; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- title bar ---------- */
-.titlebar { height: 40px; flex: none; display: flex; align-items: center; padding-left: 16px; border-bottom: 1px solid var(--hairline); -webkit-app-region: drag; }
+.titlebar { height: 40px; flex: none; display: flex; align-items: center; padding-inline-start: 16px; border-bottom: 1px solid var(--hairline); -webkit-app-region: drag; }
 .tb-brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 0.92rem; color: var(--mist); }
 .tb-lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--lamp); box-shadow: 0 0 10px 2px var(--lamp-pool), 0 0 2px var(--lamp); flex: none; }
-.tb-buttons { margin-left: auto; display: flex; height: 100%; -webkit-app-region: no-drag; }
+.tb-buttons { margin-inline-start: auto; display: flex; height: 100%; -webkit-app-region: no-drag; }
 .tb-btn { width: 46px; height: 100%; border: 0; background: transparent; color: var(--mist); display: grid; place-items: center; cursor: pointer; }
 .tb-btn svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.2; }
 .tb-btn:hover { background: var(--night-high); color: var(--moon); }
@@ -114,7 +114,7 @@ button, select, input { font: inherit; color: inherit; }
 
 /* ---------- welcome ---------- */
 .welcome { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
-.welcome-art { position: relative; overflow: hidden; display: grid; place-content: center; justify-items: center; gap: 24px; background: linear-gradient(180deg, #0d1426, #141d36); border-right: 1px solid var(--hairline); }
+.welcome-art { position: relative; overflow: hidden; display: grid; place-content: center; justify-items: center; gap: 24px; background: linear-gradient(180deg, #0d1426, #141d36); border-inline-end: 1px solid var(--hairline); }
 .welcome-art .glow { position: absolute; left: 50%; top: 34%; width: 520px; height: 520px; transform: translate(-50%, -50%); background: radial-gradient(closest-side, rgba(242, 181, 68, 0.22), transparent); }
 .welcome-lamp { position: relative; width: 96px; fill: none; stroke: #f2b544; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .welcome-lamp .glass { fill: #f2b544; stroke: none; filter: drop-shadow(0 0 14px #f2b544); }
@@ -138,12 +138,12 @@ select { background: var(--night); border: 1px solid var(--hairline-strong); bor
 
 /* ---------- app frame ---------- */
 .app { flex: 1; display: grid; grid-template-columns: 216px 1fr; min-height: 0; }
-.side { border-right: 1px solid var(--hairline); padding: 16px 12px; display: flex; flex-direction: column; gap: 2px; }
-.nav { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; height: 40px; text-align: left; border: 0; background: transparent; padding: 0 12px; border-radius: 8px; color: var(--mist); cursor: pointer; font-weight: 600; transition: background-color 120ms linear, color 120ms linear; }
+.side { border-inline-end: 1px solid var(--hairline); padding: 16px 12px; display: flex; flex-direction: column; gap: 2px; }
+.nav { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; height: 40px; text-align: start; border: 0; background: transparent; padding: 0 12px; border-radius: 8px; color: var(--mist); cursor: pointer; font-weight: 600; transition: background-color 120ms linear, color 120ms linear; }
 .nav:hover { background: var(--night-raised); color: var(--moon); }
 .nav.on { background: var(--night-high); color: var(--moon); }
 .nav.on .ic { color: var(--lamp-text); }
-.count { margin-left: auto; font-size: 0.78rem; color: var(--fog); font-variant-numeric: tabular-nums; }
+.count { margin-inline-start: auto; font-size: 0.78rem; color: var(--fog); font-variant-numeric: tabular-nums; }
 .count.accent:not(:empty) { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center; background: var(--lamp); color: var(--lamp-ink); font-weight: 700; }
 .nav-sep { height: 1px; background: var(--hairline); margin: 10px 6px; }
 .side-foot { margin-top: auto; padding: 12px; }
@@ -205,7 +205,7 @@ select { background: var(--night); border: 1px solid var(--hairline-strong); bor
 .seen summary { cursor: pointer; color: var(--fog); font-size: 0.88rem; width: max-content; }
 .seen p { margin-top: 8px; max-width: 64ch; user-select: text; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 20px; }
-.actions .link { margin-left: 6px; }
+.actions .link { margin-inline-start: 6px; }
 .recheck { margin-top: 12px; color: var(--mist); display: flex; gap: 10px; align-items: center; }
 .recheck:empty { display: none; }
 .recheck.still { color: var(--brass); }
@@ -224,7 +224,7 @@ select { background: var(--night); border: 1px solid var(--hairline-strong); bor
 .door-row .t small { color: var(--fog); }
 .door-row > .row, .door-row > .rename { grid-column: 2; margin-top: 8px; }
 .door-help { grid-column: 2; color: var(--mist); margin-top: 6px; }
-.door-help ol { margin: 6px 0 0; padding-left: 18px; }
+.door-help ol, .remove-guide ol { margin: 6px 0 0; padding-inline-start: 18px; }
 .rename { display: flex; gap: 8px; align-items: center; }
 .rename input { background: var(--night); border: 1px solid var(--hairline-strong); border-radius: 6px; height: 30px; padding: 0 10px; min-width: 200px; }
 
@@ -291,7 +291,7 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .event b { display: block; font-weight: 600; }
 .event p { color: var(--mist); font-size: 0.9rem; margin-top: 2px; user-select: text; }
 .event time { color: var(--fog); font-size: 0.8rem; }
-.event.unread b::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-radius: 50%; background: var(--lamp); vertical-align: middle; }
+.event.unread b::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-inline-start: 8px; border-radius: 50%; background: var(--lamp); vertical-align: middle; }
 .day { margin-top: 28px; }
 .day:first-child { margin-top: 0; }
 .day h2 { font: 650 0.93rem var(--sans); color: var(--mist); margin-bottom: 4px; }
@@ -309,14 +309,14 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .dev > summary { grid-template-columns: 36px 1fr auto 18px; }
 .avatar { position: relative; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--night-high); color: var(--mist); flex: none; }
 .avatar.router { background: #2a2412; color: var(--lamp-bright); }
-.avatar .state { position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--night); background: var(--porch-green); }
+.avatar .state { position: absolute; inset-inline-end: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--night); background: var(--porch-green); }
 .avatar .state.fix-soon { background: var(--ember); } .avatar .state.worth-fixing { background: var(--brass); } .avatar .state.offline { background: var(--fog); }
-.tag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; vertical-align: 1px; }
+.tag { display: inline-block; margin-inline-start: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; vertical-align: 1px; }
 .tag.new { background: var(--lamp-pool); color: var(--lamp-text); }
 .tag.unknown { background: var(--ember-wash); color: var(--ember); }
 .tag.good { background: var(--porch-green-wash); color: var(--porch-green); }
 .tag.bad { background: var(--brass-wash); color: var(--brass); }
-.dev .item-body { padding-left: 56px; display: grid; gap: 12px; }
+.dev .item-body { padding-inline-start: 56px; display: grid; gap: 12px; }
 .dev-problems { display: grid; gap: 6px; }
 .dev-problems div { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .doors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -351,7 +351,7 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .set-note:empty { display: none; }
 .set-note { padding: 0 18px 14px; }
 .switch { appearance: none; margin: 0; width: 40px; height: 22px; border-radius: 999px; background: var(--night-high); border: 1px solid var(--hairline-strong); position: relative; cursor: pointer; transition: background-color 160ms linear; }
-.switch::before { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--mist); transition: transform 180ms var(--ease), background-color 160ms linear; }
+.switch::before { content: ""; position: absolute; top: 2px; inset-inline-start: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--mist); transition: transform 180ms var(--ease), background-color 160ms linear; }
 .switch:checked { background: var(--lamp); border-color: transparent; }
 .switch:checked::before { transform: translateX(18px); background: var(--lamp-ink); }
 .about { display: flex; gap: 14px; align-items: flex-start; margin-top: 36px; color: var(--mist); }
@@ -363,3 +363,14 @@ details[open] > summary .chev { transform: rotate(180deg); }
 }
 @media (max-width: 980px) { .main { padding: 24px 28px 48px; } .home-side { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } .main { scroll-behavior: auto; } }
+
+/* Removing a device: the user's own steps, since Porchlight never touches the router. */
+.remove-guide { display: grid; gap: 6px; margin-top: 10px; padding: 14px 16px; border-radius: 10px; background: var(--night-high); border: 1px solid var(--hairline); }
+.remove-guide .guide-h { margin: 6px 0 0; font-weight: 700; color: var(--moon); }
+.remove-guide p { margin: 0; }
+
+/* Arabic reads right to left; addresses, codes and the map stay left to right. */
+html[dir="rtl"] .switch:checked::before { transform: translateX(-18px); }
+html[dir="rtl"] .tech, html[dir="rtl"] .map { direction: ltr; }
+html[lang="ar"] body { line-height: 1.7; }
+html[lang="ar"] .status, html[lang="ar"] h1, html[lang="ar"] h2 { letter-spacing: 0; }

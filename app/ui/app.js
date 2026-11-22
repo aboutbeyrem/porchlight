@@ -5,20 +5,19 @@ const T = window.__TAURI__;
 const invoke = (cmd, args) => T.core.invoke(cmd, args);
 const $ = (id) => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
-const LABEL = { "fix-soon": "Fix soon", "worth-fixing": "Worth fixing", "good-to-know": "Good to know" };
+const LABEL = new Proxy({ "fix-soon": "Fix soon", "worth-fixing": "Worth fixing", "good-to-know": "Good to know" }, { get: (o, k) => o[k] && t(o[k]) });
 const WIFI_IDS = ["PL-WIFI-WEAK", "PL-WPS", "PL-NO-PMF", "PL-EVIL-TWIN", "PL-SSID-DUPLICATE", "PL-SAVED-OPEN", "PL-SAVED-HIDDEN"];
 // Roughly how long each fix takes, so the quickest wins come first.
 const EFFORT = { "PL-WPS": 5, "PL-RDP-NLA": 5, "PL-ADB": 5, "PL-DOCKER": 5, "PL-SAVED-OPEN": 5, "PL-SAVED-HIDDEN": 5, "PL-EVIL-TWIN": 2, "PL-SSID-DUPLICATE": 5,
   "PL-NO-PMF": 10, "PL-FTP": 10, "PL-SMB1": 10, "PL-RTSP-OPEN": 10, "PL-VNC": 10, "PL-DEFAULT-PASSWORD": 10, "PL-UPNP-MAPPING": 10, "PL-DNS-INVENTS": 10, "PL-DNS-LOCAL": 10,
   "PL-IPV6-PUBLIC": 10, "PL-IPV6-ROUTERS": 15, "PL-TELNET": 15, "PL-MQTT": 15, "PL-WIFI-WEAK": 15, "PL-XMEYE": 20 };
-const PORTS = { 21: "FTP file sharing", 22: "SSH", 23: "Telnet", 80: "Settings page", 443: "Settings page (secure)", 445: "Windows file sharing", 554: "Video stream", 1883: "Smart-home messages", 2323: "Telnet", 2375: "Docker", 3389: "Remote Desktop", 5555: "Android debugging", 5900: "Screen sharing (VNC)", 8000: "Web page", 8080: "Web page", 8554: "Video stream", 34567: "XMEye", 37777: "Dahua" };
-const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-const count = (n, one, many = `${one}s`) => `${n <= 10 ? WORDS[n] : n} ${n === 1 ? one : many}`;
+const PORTS = new Proxy({ 21: "FTP file sharing", 22: "SSH", 23: "Telnet", 80: "Settings page", 443: "Settings page (secure)", 445: "Windows file sharing", 554: "Video stream", 1883: "Smart-home messages", 2323: "Telnet", 2375: "Docker", 3389: "Remote Desktop", 5555: "Android debugging", 5900: "Screen sharing (VNC)", 8000: "Web page", 8080: "Web page", 8554: "Video stream", 34567: "XMEye", 37777: "Dahua" }, { get: (o, k) => o[k] && t(o[k]) });
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 let S = null;
 let devFilter = "online";
 let editing = null; // device being renamed on Who's here
+let guideFor = null; // device whose "how to remove it" guide is open
 let naming = null; // device being named at the door
 let mapDrawnFor = "";
 let pending = null; // { key, title, since, result } while "I did it, check again" runs
@@ -106,13 +105,13 @@ const KIND_ICON = (kind = "") => {
 };
 
 const ago = (t) => {
-  if (!t) return "never";
+  if (!t) return window.t("never");
   const s = Math.max(0, Date.now() / 1000 - t);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  if (s < 60) return window.t("just now");
+  if (s < 3600) return window.t("{n} min ago", { n: Math.round(s / 60) });
+  if (s < 86400) return window.t("{n} h ago", { n: Math.round(s / 3600) });
   const d = Math.round(s / 86400);
-  return d === 1 ? "yesterday" : `${d} days ago`;
+  return d === 1 ? window.t("yesterday") : window.t("{n} days ago", { n: d });
 };
 const partOfDay = (h = new Date().getHours()) => (h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "afternoon" : h < 21 ? "evening" : "night");
 
@@ -128,18 +127,20 @@ function openFindings() {
 const effortOf = (f) => EFFORT[f.id] || 10;
 function whereOf(f) {
   const d = f.device && S.devices[f.device];
-  if (d) return d.isRouter ? "On your router" : `On ${d.name}`;
-  if (f.id.startsWith("PL-SAVED")) return "On this computer";
-  if (f.id.startsWith("PL-DNS") || f.id.startsWith("PL-IPV6")) return "In your network settings";
-  if (WIFI_IDS.includes(f.id)) return "Your Wi-Fi";
-  if (f.id === "PL-UPNP-MAPPING") return "On your router";
-  return "Your network";
+  if (d) return d.isRouter ? t("On your router") : t("On {name}", { name: d.name });
+  if (f.id.startsWith("PL-SAVED")) return t("On this computer");
+  if (f.id.startsWith("PL-DNS") || f.id.startsWith("PL-IPV6")) return t("In your network settings");
+  if (WIFI_IDS.includes(f.id)) return t("Your Wi-Fi");
+  if (f.id === "PL-UPNP-MAPPING") return t("On your router");
+  return t("Your network");
 }
 const worstFor = (key) => {
   const fs = (S?.findings || []).filter((f) => f.device === key && isOpen(f)).map((f) => f.level);
   return ["fix-soon", "worth-fixing"].find((l) => fs.includes(l)) || "";
 };
 const announced = (d) => d.customName || d.upnpName || d.serviceName || d.detectedName || d.webTitle || d.routerName;
+// A name that only repeats the kind ("Camera" for a camera) adds nothing under it.
+const sameAsKind = (d) => [d.kind, kindLabel(d.kind)].some((k) => k.toLowerCase() === d.name.toLowerCase());
 const isNew = (d) => S.baselineAt && !d.isSelf && d.firstSeen > S.baselineAt && Date.now() / 1000 - d.firstSeen < 7 * 86400;
 const atTheDoor = () => Object.values(S.devices).filter((d) => d.online && !d.isSelf && !d.isRouter && !d.kind.startsWith("this computer") && ((d.owner == null && isNew(d)) || d.owner === false || naming === d.key));
 
@@ -147,7 +148,7 @@ const atTheDoor = () => Object.values(S.devices).filter((d) => d.online && !d.is
 let toastTimer = 0;
 function toast(text, undo) {
   const t = $("toast");
-  put(t, el("span", {}, text), undo ? el("button", { class: "link", onclick: () => { undo(); t.classList.remove("on"); } }, "Undo") : null);
+  put(t, el("span", {}, text), undo ? el("button", { class: "link", onclick: () => { undo(); t.classList.remove("on"); } }, window.t("Undo")) : null);
   t.classList.add("on");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove("on"), undo ? 8000 : 5000);
@@ -164,10 +165,10 @@ async function showWelcome() {
   $("welcome").hidden = false;
   $("app").hidden = true;
   const info = await invoke("visible_networks").catch(() => ({ visible: [] }));
-  $("w-net").textContent = info.network ? info.network.cidr : "Not connected";
+  $("w-net").textContent = info.network ? info.network.cidr : t("Not connected");
   $("w-router").textContent = info.network ? info.network.gateway : "–";
   const names = info.connected ? [info.connected, ...info.visible.filter((v) => v !== info.connected)] : info.visible;
-  put($("w-ssid"), el("option", { value: "" }, names.length ? "Choose your Wi-Fi…" : "No Wi-Fi adapter (skip)"), ...names.map((n) => el("option", { value: n }, n + (n === info.connected ? "  (connected)" : ""))));
+  put($("w-ssid"), el("option", { value: "" }, names.length ? t("Choose your Wi-Fi…") : t("No Wi-Fi adapter (skip)")), ...names.map((n) => el("option", { value: n }, n + (n === info.connected ? ` ${t(" (connected)")}` : ""))));
   if (info.connected) $("w-ssid").value = info.connected;
   const ready = () => ($("w-start").disabled = !$("w-ok").checked || !info.network);
   $("w-ok").onchange = ready;
@@ -239,7 +240,7 @@ function drawMap() {
   const xs = nodes.map((n) => n.p[0]), ys = nodes.map((n) => n.p[1]);
   const half = [Math.max(200, ...xs.map(Math.abs).map((v) => v + 30)), Math.max(130, ...ys.map(Math.abs).map((v) => v + 30))];
   svg.setAttribute("viewBox", `${-half[0]} ${-half[1]} ${half[0] * 2} ${half[1] * 2}`);
-  svg.setAttribute("aria-label", `Map of your home: ${count(all.length, "device")} around your router. Use the arrow keys to move between them.`);
+  svg.setAttribute("aria-label", t("Map of your home: {count} around your router. Use the arrow keys to move between them.", { count: count(all.length, "device") }));
   svg.replaceChildren();
   const defs = svgEl("defs");
   const grad = svgEl("radialGradient", { id: "halo" });
@@ -250,8 +251,8 @@ function drawMap() {
   const focusable = [];
   const node = (d, [x, y], r, i, isRouter = false, label = false) => {
     const lvl = d.key ? worstFor(d.key) : "";
-    const name = d.more ? `${d.more} more devices` : d.name;
-    const spoken = d.more ? `${name}: open Who's here` : `${name}, ${isRouter ? "your router" : d.kind}${lvl ? `, ${LABEL[lvl].toLowerCase()}` : ""}`;
+    const name = d.more ? t("{n} more devices", { n: d.more }) : d.name;
+    const spoken = d.more ? t("{name}: open Who's here", { name }) : `${name}, ${isRouter ? t("your router") : kindLabel(d.kind)}${lvl ? `, ${LABEL[lvl].toLowerCase()}` : ""}`;
     // The outer group holds the position; the inner one animates, so the entrance never moves a device.
     const g = svgEl("g", { class: `node${isRouter ? " router" : ""}${d.more ? " more" : ""}`, transform: `translate(${x} ${y})`, tabindex: "-1", role: "button", "aria-label": spoken });
     const body = svgEl("g", { class: `body${first ? " appear" : ""}` });
@@ -260,9 +261,9 @@ function drawMap() {
     body.append(svgEl("circle", { class: "bg", r }));
     if (lvl) body.append(svgEl("circle", { class: `ring ${lvl}`, r: r + 3.5 }));
     if (d.more) {
-      const t = svgEl("text", { class: "more-n", y: 4 });
-      t.textContent = `+${d.more}`;
-      body.append(t);
+      const txt = svgEl("text", { class: "more-n", y: 4 });
+      txt.textContent = `+${d.more}`;
+      body.append(txt);
     } else {
       const glyph = icon(KIND_ICON(isRouter ? "router" : d.kind));
       const s = r * 1.05;
@@ -273,10 +274,10 @@ function drawMap() {
     tip.textContent = d.more ? name : d.name;
     g.append(tip);
     if (isRouter || label) {
-      const text = isRouter ? "Router" : d.name;
-      const t = svgEl("text", { y: r + 20 });
-      t.textContent = text.length > 13 ? `${text.slice(0, 12)}…` : text;
-      body.append(t);
+      const text = isRouter ? t("Router") : d.name;
+      const txt = svgEl("text", { y: r + 20 });
+      txt.textContent = text.length > 13 ? `${text.slice(0, 12)}…` : text;
+      body.append(txt);
     }
     const open = () => { if (d.more) go("devices"); else showDevice(d.key); };
     g.addEventListener("click", open);
@@ -299,7 +300,7 @@ function drawMap() {
   nodes.forEach((n, i) => node(n.d, n.p, n.r, i + 1, false, n.label));
   focusable[0]?.setAttribute("tabindex", "0");
   const behind = all.filter((d) => d.behindRepeater).length;
-  $("map-caption").textContent = `${all.length} device${all.length === 1 ? "" : "s"} here now${behind ? `, ${behind} through your extender` : ""}`;
+  $("map-caption").textContent = cap(t("{count} here now", { count: count(all.length, "device") })) + (behind ? t(", {n} through your extender", { n: behind }) : "");
   const levels = new Set(all.map((d) => worstFor(d.key)));
   $("lg-soon").hidden = !levels.has("fix-soon");
   $("lg-worth").hidden = !levels.has("worth-fixing");
@@ -323,7 +324,7 @@ async function recheck(f) {
 }
 async function accept(f, yes = true) {
   await invoke("accept_finding", { key: fkey(f), accept: yes });
-  if (yes) toast("Okay. Porchlight won't bring this up again.", () => accept(f, false));
+  if (yes) toast(t("Okay. Porchlight won't bring this up again."), () => accept(f, false));
 }
 function skip(f) {
   const s = store.get("pl-skip", []).filter((k) => k !== fkey(f));
@@ -340,8 +341,8 @@ function prefer(f) {
 
 function recheckNote(f) {
   if (!pending || pending.key !== fkey(f)) return el("p", { class: "recheck", role: "status" });
-  if (pending.result === "still") return el("p", { class: "recheck still", role: "status" }, "It's still there. Some devices only apply a change after a restart: restart it, wait a minute, then check again.");
-  return el("p", { class: "recheck", role: "status" }, el("span", { class: "spinner", "aria-hidden": "true" }), "Checking your home again. This takes about a minute.");
+  if (pending.result === "still") return el("p", { class: "recheck still", role: "status" }, t("It's still there. Some devices only apply a change after a restart: restart it, wait a minute, then check again."));
+  return el("p", { class: "recheck", role: "status" }, el("span", { class: "spinner", "aria-hidden": "true" }), t("Checking your home again. This takes about a minute."));
 }
 
 function fixBody(f, { isNext = false } = {}) {
@@ -349,22 +350,22 @@ function fixBody(f, { isNext = false } = {}) {
   return [
     el("p", { class: "why" }, f.means),
     f.fix.length ? el("ol", { class: "steps" }, f.fix.map((s) => el("li", {}, s))) : null,
-    el("details", { class: "seen" }, el("summary", {}, "What Porchlight saw"), el("p", {}, f.found), el("p", {}, `How likely it matters: ${f.likely}`)),
+    el("details", { class: "seen" }, el("summary", {}, t("What Porchlight saw")), el("p", {}, f.found), el("p", {}, t("How likely it matters: {x}", { x: f.likely }))),
     el("div", { class: "actions" },
-      el("button", { class: `btn ${isNext ? "lamp" : "quiet small"}`, disabled: busy || S.busy, onclick: () => recheck(f) }, isNext ? "I did it, check again" : "I did it, check again"),
-      isNext && openFindings().length > 1 ? el("button", { class: "btn quiet", onclick: () => skip(f) }, "Show me another") : null,
-      !isNext ? el("button", { class: "btn quiet small", onclick: () => prefer(f) }, "Do this one next") : null,
-      el("button", { class: "link quiet", onclick: () => accept(f) }, "It's fine, stop telling me")),
+      el("button", { class: `btn ${isNext ? "lamp" : "quiet small"}`, disabled: busy || S.busy, onclick: () => recheck(f) }, t("I did it, check again")),
+      isNext && openFindings().length > 1 ? el("button", { class: "btn quiet", onclick: () => skip(f) }, t("Show me another")) : null,
+      !isNext ? el("button", { class: "btn quiet small", onclick: () => prefer(f) }, t("Do this one next")) : null,
+      el("button", { class: "link quiet", onclick: () => accept(f) }, t("It's fine, stop telling me"))),
     recheckNote(f),
   ];
 }
 
 function findingRow(f, mode = "todo") {
-  const meta = mode === "ok" ? null : mode === "tip" ? "Good to know" : `${LABEL[f.level]} · ${effortOf(f)} min`;
+  const meta = mode === "ok" ? null : mode === "tip" ? t("Good to know") : `${LABEL[f.level]} · ${t("{n} min", { n: effortOf(f) })}`;
   const body = mode === "ok"
-    ? [el("p", { class: "why" }, f.found), el("div", { class: "actions" }, el("button", { class: "btn quiet small", onclick: () => accept(f, false) }, "Put it back on my list"))]
+    ? [el("p", { class: "why" }, f.found), el("div", { class: "actions" }, el("button", { class: "btn quiet small", onclick: () => accept(f, false) }, t("Put it back on my list")))]
     : mode === "tip"
-      ? [el("p", { class: "why" }, f.found), el("p", { class: "why" }, f.means), f.fix.length ? el("ol", { class: "steps" }, f.fix.map((s) => el("li", {}, s))) : null, el("div", { class: "actions" }, el("button", { class: "link quiet", onclick: () => accept(f) }, "Got it, hide this"))]
+      ? [el("p", { class: "why" }, f.found), el("p", { class: "why" }, f.means), f.fix.length ? el("ol", { class: "steps" }, f.fix.map((s) => el("li", {}, s))) : null, el("div", { class: "actions" }, el("button", { class: "link quiet", onclick: () => accept(f) }, t("Got it, hide this")))]
       : fixBody(f);
   const d = keepOpen(el("details", { class: "item" },
     el("summary", {}, dot(mode === "ok" ? "good-to-know" : f.level), el("span", { class: "t" }, el("b", {}, f.title), el("small", {}, whereOf(f))), el("span", { class: "meta" }, meta), ic("chevron", "chev")),
@@ -374,31 +375,49 @@ function findingRow(f, mode = "todo") {
 
 function avatar(d) {
   const lvl = d.online ? worstFor(d.key) : "offline";
-  return el("div", { class: `avatar${d.isRouter ? " router" : ""}` }, icon(KIND_ICON(d.kind)), el("span", { class: `state ${lvl}`, title: lvl ? LABEL[lvl] || "Offline" : "No problems found" }));
+  return el("div", { class: `avatar${d.isRouter ? " router" : ""}` }, icon(KIND_ICON(d.kind)), el("span", { class: `state ${lvl}`, title: lvl ? LABEL[lvl] || t("Offline") : t("No problems found") }));
 }
 
 function renameForm(d, done) {
-  return el("form", { class: "rename", onsubmit: async (e) => { e.preventDefault(); const name = e.target.elements.n.value; done(); await invoke("rename_device", { key: d.key, name }); toast(`Saved. Porchlight will call it "${name.trim() || d.name}".`); } },
-    el("input", { name: "n", value: d.customName || (announced(d) ? d.name : ""), placeholder: "For example: Mum's phone", maxlength: "40", "aria-label": `Name for ${d.name}` }),
-    el("button", { class: "btn lamp small", type: "submit" }, "Save"),
-    el("button", { class: "link quiet", type: "button", onclick: () => { done(); render(true); } }, "Skip"));
+  return el("form", { class: "rename", onsubmit: async (e) => { e.preventDefault(); const name = e.target.elements.n.value; done(); await invoke("rename_device", { key: d.key, name }); toast(t('Saved. Porchlight will call it "{name}".', { name: name.trim() || d.name })); } },
+    el("input", { name: "n", value: d.customName || (announced(d) ? d.name : ""), placeholder: t("For example: Mum's phone"), maxlength: "40", "aria-label": t("Name for {name}", { name: d.name }) }),
+    el("button", { class: "btn lamp small", type: "submit" }, t("Save")),
+    el("button", { class: "link quiet", type: "button", onclick: () => { done(); render(true); } }, t("Skip")));
+}
+
+// How to get a device off the network. Porchlight never touches the router itself, so these are the user's steps.
+function removalGuide(d) {
+  const gw = S.home?.gateway;
+  return el("div", { class: "remove-guide" },
+    el("b", {}, t("Remove a device from your network")),
+    el("p", {}, t("Porchlight never logs in to your router or attacks devices, so it can't push anything off by itself. These two ways work:")),
+    el("p", { class: "guide-h" }, t("Change your Wi-Fi password (the sure way)")),
+    el("ol", {},
+      el("li", {}, gw ? t("Open your router's settings page at {url} and log in.", { url: `http://${gw}/` }) : t("Open your router's settings page and log in.")),
+      el("li", {}, t("Go to Wi-Fi (or Wireless) → Security, and set a new password of 12 characters or more. Keep WPA2 or WPA3.")),
+      el("li", {}, t("Reconnect your own devices with the new password. Everyone else is out."))),
+    el("p", { class: "guide-h" }, t("Or block just this device")),
+    el("ol", {},
+      el("li", {}, t('In the router\'s settings, find "Connected devices", "Access control" or "MAC filter".')),
+      d.mac ? el("li", {}, t("Find the device with hardware address {mac} ({ip}) and choose Block.", { mac: d.mac, ip: d.ip })) : null,
+      el("li", {}, t("Some phones change their hardware address, so a block may not last. Changing the password always works."))),
+    el("p", { class: "muted small" }, t("Porchlight will tell you if it comes back.")));
 }
 
 function doorRow(d) {
-  const kindText = d.kind.toLowerCase() === d.name.toLowerCase() ? null : d.kind;
-  const sub = [d.owner === false ? "you didn't recognise it" : `joined ${ago(d.firstSeen)}`, kindText, d.vendor, d.behindRepeater ? "through your extender" : null].filter(Boolean).join(" · ");
+  const kindText = sameAsKind(d) ? null : kindLabel(d.kind);
+  const sub = [d.owner === false ? t("you didn't recognise it") : t("joined {when}", { when: ago(d.firstSeen) }), kindText, d.vendor, d.behindRepeater ? t("through your extender") : null].filter(Boolean).join(" · ");
   const right = naming === d.key
     ? renameForm(d, () => { naming = null; })
     : d.owner === false
-      ? el("div", { class: "row" }, el("button", { class: "btn quiet small", onclick: () => invoke("confirm_device", { key: d.key, mine: true }) }, "Actually, it's ours"))
+      ? el("div", { class: "row" }, el("button", { class: "btn quiet small", onclick: () => invoke("confirm_device", { key: d.key, mine: true }) }, t("Actually, it's ours")))
       : el("div", { class: "row" },
-        el("button", { class: "btn lamp small", onclick: async () => { await invoke("confirm_device", { key: d.key, mine: true }); if (!announced(d)) { naming = d.key; render(true); setTimeout(() => document.querySelector(".door .rename input")?.focus(), 0); } else toast("Thanks. Porchlight will remember it."); } }, "Yes, it's ours"),
-        el("button", { class: "btn quiet small", onclick: () => invoke("confirm_device", { key: d.key, mine: false }) }, "I don't know it"));
+        el("button", { class: "btn lamp small", onclick: async () => { await invoke("confirm_device", { key: d.key, mine: true }); if (!announced(d)) { naming = d.key; render(true); setTimeout(() => document.querySelector(".door .rename input")?.focus(), 0); } else toast(t("Thanks. Porchlight will remember it.")); } }, t("Yes, it's ours")),
+        el("button", { class: "btn quiet small", onclick: () => invoke("confirm_device", { key: d.key, mine: false }) }, t("I don't know it")));
   return el("div", { class: `door-row${d.owner === false ? " unknown" : ""}` }, avatar(d),
     el("div", { class: "t" }, el("b", {}, d.name), el("small", {}, sub)),
     right,
-    d.owner === false ? el("div", { class: "door-help" }, "Then someone may know your Wi-Fi password. It could also be a visitor's phone, or a gadget you forgot about, like a smart plug.",
-      el("ol", {}, el("li", {}, "Open your router's settings page, go to Wi-Fi (or Wireless), and set a new password of 12 characters or more."), el("li", {}, "Reconnect your own devices with the new password."), el("li", {}, "Porchlight will tell you if this device comes back."))) : null);
+    d.owner === false ? el("div", { class: "door-help" }, el("p", {}, t("Then someone may know your Wi-Fi password. It could also be a visitor's phone, or a gadget you forgot about, like a smart plug.")), removalGuide(d)) : null);
 }
 
 // ---------- Home ----------
@@ -413,24 +432,24 @@ function renderHome(force) {
 
   // The sentence first: what Porchlight would say if you asked "how's home?"
   let line, sub;
-  if (!S.lastCheck) { line = "Taking a first look…"; sub = "This takes about a minute. You can close the window: Porchlight keeps going in the tray."; }
-  else if (!S.onHome) { line = "You're away from home."; sub = "Porchlight watches your home network and picks up again when you're back. It still watches the Wi-Fi around you here."; }
-  else if (strangers) { line = strangers === 1 ? "Someone you don't recognise is on your Wi-Fi." : `${cap(count(strangers, "device"))} you don't recognise are on your Wi-Fi.`; sub = "Changing your Wi-Fi password sends them away. The steps are below."; }
-  else if (!open.length && !door.length) { line = "All quiet at home."; sub = `${cap(count(online.length, "device"))} here, and nothing needs you. Porchlight keeps watching from the tray.`; }
-  else if (soon) { line = soon === 1 ? "One thing should be fixed soon." : `${cap(WORDS[soon] || String(soon))} things should be fixed soon.`; }
-  else if (open.length) { line = "Your home is mostly safe."; }
-  else { line = door.length === 1 ? "Someone new joined your network." : `${cap(count(door.length, "new device"))} joined your network.`; sub = "Tell Porchlight whether you know them."; }
-  if (!sub && open.length) sub = `${cap(count(open.length, "thing"))} to do${door.length ? ", and someone new to check" : ""}. The next one takes about ${effortOf(open[0])} minutes.`;
+  if (!S.lastCheck) { line = t("Taking a first look…"); sub = t("This takes about a minute. You can close the window: Porchlight keeps going in the tray."); }
+  else if (!S.onHome) { line = t("You're away from home."); sub = t("Porchlight watches your home network and picks up again when you're back. It still watches the Wi-Fi around you here."); }
+  else if (strangers) { line = strangers === 1 ? t("Someone you don't recognise is on your Wi-Fi.") : t("{count} you don't recognise are on your Wi-Fi.", { count: cap(count(strangers, "device")) }); sub = t("Changing your Wi-Fi password sends them away. The steps are below."); }
+  else if (!open.length && !door.length) { line = t("All quiet at home."); sub = t("{count} here, and nothing needs you. Porchlight keeps watching from the tray.", { count: cap(count(online.length, "device")) }); }
+  else if (soon) { line = soon === 1 ? t("One thing should be fixed soon.") : t("{count} should be fixed soon.", { count: cap(count(soon, "thing")) }); }
+  else if (open.length) { line = t("Your home is mostly safe."); }
+  else { line = door.length === 1 ? t("Someone new joined your network.") : t("{count} joined your network.", { count: cap(count(door.length, "new device")) }); sub = t("Tell Porchlight whether you know them."); }
+  if (!sub && open.length) sub = t("{count} to do", { count: cap(count(open.length, "thing")) }) + (door.length ? t(", and someone new to check") : "") + t(". The next one takes about {n} minutes.", { n: effortOf(open[0]) });
   $("status-line").textContent = line;
   $("status-sub").textContent = sub;
   put($("when"), ...[S.busy ? el("span", { class: "spinner", "aria-hidden": "true" }) : null,
-    S.busy ? `Checking now${S.progress ? `: ${S.progress.toLowerCase()}` : ""}…` : `${cap(new Date().toLocaleDateString("en-GB", { weekday: "long" }))} ${partOfDay()} · ${S.lastCheck ? `checked ${ago(S.lastCheck)}` : "first look"}`].filter(Boolean));
+    S.busy ? `${t("Checking now")}${S.progress ? `: ${S.progress.toLowerCase()}` : ""}…` : `${cap(new Date().toLocaleDateString(LOCALE[LANG], { weekday: "long" }))} ${t(`part:${partOfDay()}`)} · ${S.lastCheck ? t("checked {when}", { when: ago(S.lastCheck) }) : t("first look")}`].filter(Boolean));
   $("check-now").disabled = S.busy;
-  $("check-label").textContent = S.busy ? "Checking…" : "Check now";
+  $("check-label").textContent = S.busy ? t("Checking…") : t("Check now");
   $("lamp-pool").classList.toggle("quiet", Boolean(S.lastCheck) && !open.length && !door.length);
-  document.querySelector(".tonight h2").textContent = `Your home ${partOfDay() === "night" ? "tonight" : `this ${partOfDay()}`}`;
+  document.querySelector(".tonight h2").textContent = t(partOfDay() === "night" ? "Your home tonight" : `Your home this ${partOfDay()}`);
 
-  const sig = JSON.stringify([S.findings, S.accepted, door.map((d) => [d.key, d.name, d.owner]), naming, pending, S.busy, store.get("pl-skip", []), S.lastCheck, S.onHome, S.listening, S.wifi.copies.length]);
+  const sig = JSON.stringify([LANG, S.findings, S.accepted, door.map((d) => [d.key, d.name, d.owner]), naming, pending, S.busy, store.get("pl-skip", []), S.lastCheck, S.onHome, S.listening, S.wifi.copies.length]);
   if (force !== true && sig === drawn.home) { drawMap(); renderRecent(); return; }
   drawn.home = sig;
 
@@ -438,7 +457,7 @@ function renderHome(force) {
   $("next").hidden = !next || !S.onHome;
   if (next) {
     put($("next"), 
-      el("p", { class: "next-kicker" }, dot(next.level), `Next step · about ${effortOf(next)} minutes`),
+      el("p", { class: "next-kicker" }, dot(next.level), t("Next step · about {n} minutes", { n: effortOf(next) })),
       el("h2", {}, next.title),
       el("p", { class: "where" }, whereOf(next)),
       ...fixBody(next, { isNext: true }));
@@ -451,13 +470,13 @@ function renderHome(force) {
   if (calm) {
     const copies = S.wifi.copies.length;
     put($("watching"), 
-      checkRow(true, "Who joins your Wi-Fi", "You'll hear about anyone new within a few minutes.", "Watching"),
-      checkRow(true, "Your router", "Something pretending to be your router is caught as it happens.", "Watching"),
-      checkRow(!copies, "Fake copies of your Wi-Fi", copies ? "Something nearby uses your Wi-Fi's name. See Wi-Fi." : "Nothing nearby uses your Wi-Fi's name.", copies ? `${copies} nearby` : "None"),
-      checkRow(Boolean(S.listening), "Being kicked off the Wi-Fi", "Listened for live, between checks.", S.listening ? "Listening" : "Off"),
-      checkRow(true, "Your DNS", "If the address book your computer uses for websites changes, you'll know.", "Watching"));
+      checkRow(true, t("Who joins your Wi-Fi"), t("You'll hear about anyone new within a few minutes."), t("Watching")),
+      checkRow(true, t("Your router"), t("Something pretending to be your router is caught as it happens."), t("Watching")),
+      checkRow(!copies, t("Fake copies of your Wi-Fi"), copies ? t("Something nearby uses your Wi-Fi's name. See Wi-Fi.") : t("Nothing nearby uses your Wi-Fi's name."), copies ? t("{n} nearby", { n: copies }) : t("None")),
+      checkRow(Boolean(S.listening), t("Being kicked off the Wi-Fi"), t("Listened for live, between checks."), S.listening ? t("Listening") : t("Off")),
+      checkRow(true, t("Your DNS"), t("If the address book your computer uses for websites changes, you'll know."), t("Watching")));
   }
-  $("door-title").textContent = strangers ? "Not recognised" : door.length === 1 ? "Someone new joined your network. Is it yours?" : "Some new devices joined. Are they yours?";
+  $("door-title").textContent = strangers ? t("Not recognised") : door.length === 1 ? t("Someone new joined your network. Is it yours?") : t("Some new devices joined. Are they yours?");
   put($("door-list"), ...door.map(doorRow));
   const rest = open.slice(1);
   $("todo-sec").hidden = !rest.length;
@@ -474,13 +493,13 @@ function renderHome(force) {
 
 function eventRow(a) {
   const when = new Date(a.at * 1000);
-  return el("div", { class: `event${a.read ? "" : " unread"}` }, dot(a.level), el("div", {}, el("b", {}, a.title, a.read ? null : el("span", { class: "sr-only" }, " (new)")), el("p", {}, a.body), el("time", { datetime: when.toISOString(), title: when.toLocaleString() }, ago(a.at))));
+  return el("div", { class: `event${a.read ? "" : " unread"}` }, dot(a.level), el("div", {}, el("b", {}, a.title, a.read ? null : el("span", { class: "sr-only" }, t(" (new)"))), el("p", {}, a.body), el("time", { datetime: when.toISOString(), title: when.toLocaleString(LOCALE[LANG]) }, ago(a.at))));
 }
 function renderRecent() {
-  const sig = JSON.stringify(S.alerts.slice(0, 3).map((a) => [a.id, a.read]));
+  const sig = JSON.stringify([LANG, S.alerts.slice(0, 3).map((a) => [a.id, a.read])]);
   if (sig === drawn.recent) return;
   drawn.recent = sig;
-  put($("recent"), ...(S.alerts.length ? S.alerts.slice(0, 3).map(eventRow) : [el("p", { class: "empty" }, "Nothing has happened yet.")]));
+  put($("recent"), ...(S.alerts.length ? S.alerts.slice(0, 3).map(eventRow) : [el("p", { class: "empty" }, t("Nothing has happened yet."))]));
 }
 
 // ---------- Who's here ----------
@@ -496,20 +515,22 @@ function groupOf(d) {
 function deviceRow(d) {
   const problems = S.findings.filter((f) => f.device === d.key && isOpen(f));
   const lvl = worstFor(d.key);
-  const sub = [d.kind.toLowerCase() === d.name.toLowerCase() ? null : cap(d.kind), d.vendor && !d.name.includes(d.vendor) ? d.vendor : null, d.behindRepeater && !d.kind.includes("extender") ? "through your extender" : null].filter(Boolean).join(" · ");
-  const right = !d.online ? `Last seen ${ago(d.lastSeen)}` : lvl ? LABEL[lvl] : "";
-  const tags = [isNew(d) && d.owner == null ? el("span", { class: "tag new" }, "New") : null, d.owner === false ? el("span", { class: "tag unknown" }, "Not recognised") : null];
+  const sub = [sameAsKind(d) ? null : cap(kindLabel(d.kind)), d.vendor && !d.name.includes(d.vendor) ? d.vendor : null, d.behindRepeater && !d.kind.includes("extender") ? t("through your extender") : null].filter(Boolean).join(" · ");
+  const right = !d.online ? t("Last seen {when}", { when: ago(d.lastSeen) }) : lvl ? LABEL[lvl] : "";
+  const tags = [isNew(d) && d.owner == null ? el("span", { class: "tag new" }, t("New")) : null, d.owner === false ? el("span", { class: "tag unknown" }, t("Not recognised")) : null];
   const silent = !announced(d) && !d.isSelf && !d.isRouter;
-  const ports = (d.deep?.ports || []).map((p) => PORTS[p] || `Port ${p}`);
+  const ports = (d.deep?.ports || []).map((p) => PORTS[p] || t("Port {p}", { p }));
   const body = el("div", { class: "item-body" },
-    problems.length ? el("div", { class: "dev-problems" }, problems.map((f) => el("div", {}, dot(f.level), el("span", {}, f.title), el("button", { class: "link", onclick: () => prefer(f) }, "Show me how")))) : null,
-    silent ? el("p", {}, "It doesn't announce a name (many phones hide theirs). Give it one and Porchlight will remember it.") : null,
-    ports.length ? el("div", { class: "doors" }, el("span", { class: "muted small" }, "Open to the network:"), ports.map((p) => el("span", { class: "door-chip" }, p))) : null,
+    problems.length ? el("div", { class: "dev-problems" }, problems.map((f) => el("div", {}, dot(f.level), el("span", {}, f.title), el("button", { class: "link", onclick: () => prefer(f) }, t("Show me how"))))) : null,
+    silent ? el("p", {}, t("It doesn't announce a name (many phones hide theirs). Give it one and Porchlight will remember it.")) : null,
+    ports.length ? el("div", { class: "doors" }, el("span", { class: "muted small" }, t("Open to the network:")), ports.map((p) => el("span", { class: "door-chip" }, p))) : null,
     editing === d.key ? renameForm(d, () => { editing = null; }) : el("div", { class: "row" },
-      d.isSelf ? null : el("button", { class: "btn quiet small", onclick: () => { editing = d.key; render(true); setTimeout(() => document.querySelector(`[data-key="dev-${CSS.escape(d.key)}"] .rename input`)?.select(), 0); } }, silent ? "Name it" : "Rename"),
-      !d.isSelf && !d.isRouter && d.owner == null ? el("button", { class: "btn quiet small", onclick: () => invoke("confirm_device", { key: d.key, mine: true }) }, "It's ours") : null,
-      !d.isSelf && !d.isRouter && d.owner !== false ? el("button", { class: "link quiet", onclick: () => { invoke("confirm_device", { key: d.key, mine: false }); go("home"); } }, "I don't know it") : null,
-      !d.online ? el("button", { class: "link quiet", onclick: () => invoke("forget_device", { key: d.key }) }, "Forget it") : null),
+      d.isSelf ? null : el("button", { class: "btn quiet small", onclick: () => { editing = d.key; render(true); setTimeout(() => document.querySelector(`[data-key="dev-${CSS.escape(d.key)}"] .rename input`)?.select(), 0); } }, silent ? t("Name it") : t("Rename")),
+      !d.isSelf && !d.isRouter && d.owner == null ? el("button", { class: "btn quiet small", onclick: () => invoke("confirm_device", { key: d.key, mine: true }) }, t("It's ours")) : null,
+      !d.isSelf && !d.isRouter && d.owner !== false ? el("button", { class: "link quiet", onclick: () => { invoke("confirm_device", { key: d.key, mine: false }); go("home"); } }, t("I don't know it")) : null,
+      d.online && !d.isSelf && !d.isRouter ? el("button", { class: "link quiet", "aria-expanded": String(guideFor === d.key), onclick: () => { guideFor = guideFor === d.key ? null : d.key; render(true); } }, t("How to remove it")) : null,
+      !d.online ? el("button", { class: "link quiet", onclick: () => invoke("forget_device", { key: d.key }) }, t("Forget it")) : null),
+    guideFor === d.key ? removalGuide(d) : null,
     el("p", { class: "tech" }, [d.ip, d.mac].filter(Boolean).join("  ·  ")));
   const det = keepOpen(el("details", { class: "item dev" },
     el("summary", {}, avatar(d), el("span", { class: "t" }, el("b", {}, d.name, ...tags), sub ? el("small", {}, sub) : null), el("span", { class: "meta" }, right), ic("chevron", "chev")),
@@ -519,11 +540,11 @@ function deviceRow(d) {
 function renderDevices(force) {
   if (document.activeElement?.closest?.("#v-devices .rename")) return;
   const list = Object.values(S.devices).filter((d) => devFilter === "all" || d.online);
-  const sig = JSON.stringify([list, S.findings, S.accepted, editing, devFilter]);
+  const sig = JSON.stringify([LANG, list, S.findings, S.accepted, editing, guideFor, devFilter]);
   if (force !== true && sig === drawn.devices) return;
   drawn.devices = sig;
-  const groups = GROUPS.map((title, i) => ({ title, items: list.filter((d) => groupOf(d) === i).sort((a, b) => b.isRouter - a.isRouter || b.isSelf - a.isSelf || a.name.localeCompare(b.name)) })).filter((g) => g.items.length);
-  put($("device-groups"), ...(groups.length ? groups.map((g) => el("section", { class: "group" }, el("h2", {}, g.title, el("span", { class: "n" }, g.items.length)), el("ul", { class: "rows" }, g.items.map(deviceRow)))) : [el("p", { class: "empty" }, "No devices yet. The first look takes about a minute.")]));
+  const groups = GROUPS.map((title, i) => ({ title: t(title), items: list.filter((d) => groupOf(d) === i).sort((a, b) => b.isRouter - a.isRouter || b.isSelf - a.isSelf || a.name.localeCompare(b.name)) })).filter((g) => g.items.length);
+  put($("device-groups"), ...(groups.length ? groups.map((g) => el("section", { class: "group" }, el("h2", {}, g.title, el("span", { class: "n" }, g.items.length)), el("ul", { class: "rows" }, g.items.map(deviceRow)))) : [el("p", { class: "empty" }, t("No devices yet. The first look takes about a minute."))]));
 }
 function showDevice(key) {
   openRows.add(`dev-${key}`);
@@ -544,22 +565,22 @@ function checkRow(good, title, explain, value) {
 }
 function renderWifi(force) {
   const w = S.wifi;
-  const sig = JSON.stringify([w, S.findings, S.accepted, S.listening, pending, S.busy]);
+  const sig = JSON.stringify([LANG, w, S.findings, S.accepted, S.listening, pending, S.busy]);
   if (force !== true && sig === drawn.wifi) return;
   drawn.wifi = sig;
   const weak = (p) => ["Open", "WEP", "WPA", "WPA2 (old TKIP)"].includes(p);
   const source = { home: "Your Wi-Fi", "second network from your router": "A second network from your router", "your extender": "Your extender's network" };
   put($("wifi-nets"), ...(w.yours.length ? w.yours.map((n) => el("div", { class: `panel net${n.source === "home" ? " home" : ""}` },
-    el("div", { class: "net-head" }, ic(n.source === "your extender" ? "extender" : "wifi"), el("div", {}, el("b", {}, n.ssid), el("small", {}, source[n.source] || n.source))),
+    el("div", { class: "net-head" }, ic(n.source === "your extender" ? "extender" : "wifi"), el("div", {}, el("b", {}, n.ssid), el("small", {}, t(source[n.source] || n.source)))),
     el("ul", { class: "rows" },
-      checkRow(!weak(n.protection), "Password lock", "Keeps strangers off your Wi-Fi.", weak(n.protection) ? `Weak (${n.protection})` : `Strong (${n.protection})`),
-      checkRow(n.pmf !== "off", "Protection from fake disconnects", "Stops someone nearby kicking your devices off the Wi-Fi (PMF).", n.pmf === "off" ? "Off" : "On"),
-      checkRow(!n.wps, "PIN pairing (WPS)", "An old way to join with an 8-digit PIN that can be guessed on some models.", n.wps ? "On" : "Off")))) : [el("p", { class: "empty" }, w.homeSsid ? "Your Wi-Fi wasn't heard on the last check." : "Choose your Wi-Fi in Settings so Porchlight can watch it.")]));
+      checkRow(!weak(n.protection), t("Password lock"), t("Keeps strangers off your Wi-Fi."), t(weak(n.protection) ? "Weak ({p})" : "Strong ({p})", { p: n.protection })),
+      checkRow(n.pmf !== "off", t("Protection from fake disconnects"), t("Stops someone nearby kicking your devices off the Wi-Fi (PMF)."), n.pmf === "off" ? t("Off") : t("On")),
+      checkRow(!n.wps, t("PIN pairing (WPS)"), t("An old way to join with an 8-digit PIN that can be guessed on some models."), n.wps ? t("On") : t("Off"))))) : [el("p", { class: "empty" }, w.homeSsid ? t("Your Wi-Fi wasn't heard on the last check.") : t("Choose your Wi-Fi in Settings so Porchlight can watch it."))]));
   put($("wifi-around"), 
-    checkRow(!w.copies.length, "Fake copies of your Wi-Fi", w.copies.length ? `Using your Wi-Fi's name: ${w.copies.map((c) => `${c.ssid} (${c.protection})`).join(", ")}. Don't connect to them.` : "Nothing nearby is using your Wi-Fi's name.", w.copies.length ? `${w.copies.length} nearby` : "None"),
-    checkRow(!w.savedOpenAuto.length, "Networks this computer joins by itself", w.savedOpenAuto.length ? `Open networks it would join without asking: ${w.savedOpenAuto.map((s) => s.ssid).join(", ")}. Fake hotspots use exactly this.` : `${w.savedCount} saved, none of them open. Fake hotspots can't lure it.`, w.savedOpenAuto.length ? "Worth fixing" : "Safe"),
-    checkRow(Boolean(S.listening), "Kick-off watch", S.listening ? "Listening live: Porchlight warns you the moment this computer is pushed off the Wi-Fi again and again." : "Not available on this computer (no Wi-Fi adapter, or Windows didn't allow it). Regular checks still run.", S.listening ? "Listening" : "Off"),
-    w.adapters.length ? checkRow(true, "Wi-Fi adapter", `${w.adapters.join(", ")}${w.connected ? `, connected to "${w.connected}"` : ", not connected"}.`, "Working") : null);
+    checkRow(!w.copies.length, t("Fake copies of your Wi-Fi"), w.copies.length ? t("Using your Wi-Fi's name: {list}. Don't connect to them.", { list: w.copies.map((c) => `${c.ssid} (${c.protection})`).join(", ") }) : t("Nothing nearby is using your Wi-Fi's name."), w.copies.length ? t("{n} nearby", { n: w.copies.length }) : t("None")),
+    checkRow(!w.savedOpenAuto.length, t("Networks this computer joins by itself"), w.savedOpenAuto.length ? t("Open networks it would join without asking: {list}. Fake hotspots use exactly this.", { list: w.savedOpenAuto.map((s) => s.ssid).join(", ") }) : t("{n} saved, none of them open. Fake hotspots can't lure it.", { n: w.savedCount }), w.savedOpenAuto.length ? t("Worth fixing") : t("Safe")),
+    checkRow(Boolean(S.listening), t("Kick-off watch"), S.listening ? t("Listening live: Porchlight warns you the moment this computer is pushed off the Wi-Fi again and again.") : t("Not available on this computer (no Wi-Fi adapter, or Windows didn't allow it). Regular checks still run."), S.listening ? t("Listening") : t("Off")),
+    w.adapters.length ? checkRow(true, t("Wi-Fi adapter"), `${w.adapters.join(", ")}${w.connected ? t(', connected to "{name}"', { name: w.connected }) : t(", not connected")}.`, t("Working")) : null);
   const fs = S.findings.filter((f) => WIFI_IDS.includes(f.id) && isOpen(f));
   $("wifi-todo-sec").hidden = !fs.length;
   put($("wifi-todo"), ...fs.map((f) => findingRow(f)));
@@ -567,14 +588,14 @@ function renderWifi(force) {
 
 // ---------- History ----------
 function renderAlerts() {
-  const sig = JSON.stringify(S.alerts.map((a) => [a.id, a.read]));
+  const sig = JSON.stringify([LANG, S.alerts.map((a) => [a.id, a.read])]);
   if (sig === drawn.alerts) return;
   drawn.alerts = sig;
-  if (!S.alerts.length) { put($("alert-list"), el("p", { class: "empty" }, "Nothing yet. Porchlight will note here everything it notices.")); return; }
-  const dayOf = (t) => { const d = new Date(t * 1000); const today = new Date(); const y = new Date(Date.now() - 86400000);
-    if (d.toDateString() === today.toDateString()) return "Today";
-    if (d.toDateString() === y.toDateString()) return "Yesterday";
-    return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }); };
+  if (!S.alerts.length) { put($("alert-list"), el("p", { class: "empty" }, t("Nothing yet. Porchlight will note here everything it notices."))); return; }
+  const dayOf = (at) => { const d = new Date(at * 1000); const today = new Date(); const y = new Date(Date.now() - 86400000);
+    if (d.toDateString() === today.toDateString()) return t("Today");
+    if (d.toDateString() === y.toDateString()) return t("Yesterday");
+    return d.toLocaleDateString(LOCALE[LANG], { weekday: "long", day: "numeric", month: "long" }); };
   const days = [];
   for (const a of S.alerts) { const k = dayOf(a.at); if (!days.length || days[days.length - 1].k !== k) days.push({ k, items: [] }); days[days.length - 1].items.push(a); }
   put($("alert-list"), ...days.map((d) => el("section", { class: "day" }, el("h2", {}, d.k), d.items.map(eventRow))));
@@ -583,20 +604,22 @@ function renderAlerts() {
 // ---------- Settings ----------
 function renderSettings() {
   $("about-version").textContent = `Porchlight ${S.appVersion || ""}`.trim();
-  $("u-title").textContent = S.update ? `Porchlight ${S.update} is ready` : `Porchlight ${S.appVersion || ""} is up to date`.replace("  ", " ");
+  $("u-title").textContent = S.update ? t("Porchlight {v} is ready", { v: S.update }) : t("Porchlight {v} is up to date", { v: S.appVersion || "" }).replace("  ", " ");
   $("u-install").hidden = !S.update;
   if (document.activeElement?.closest?.(".settings")) return;
   $("s-autostart").checked = S.autostart;
   $("s-notify").checked = S.settings.notify;
   $("s-interval").value = String(S.settings.intervalMin);
+  $("s-lang").value = S.settings.lang || "";
   const names = [...new Set([S.settings.homeSsid, S.wifi.connected, ...S.wifi.visible].filter(Boolean))];
-  put($("s-ssid"), el("option", { value: "" }, "None"), ...names.map((n) => el("option", { value: n }, n)));
+  put($("s-ssid"), el("option", { value: "" }, t("None")), ...names.map((n) => el("option", { value: n }, n)));
   $("s-ssid").value = S.settings.homeSsid || S.wifi.connected || "";
 }
 
 // ---------- everything ----------
 function render(force) {
   if (!S) return;
+  if (S.lang && S.lang !== LANG) { setLang(S.lang); mapDrawnFor = ""; force = true; }
   if (!S.settings.consented) return showWelcome();
   $("welcome").hidden = true;
   $("app").hidden = false;
@@ -607,11 +630,11 @@ function render(force) {
   const unread = S.alerts.filter((a) => !a.read).length;
   $("n-alerts").textContent = unread || "";
   const watching = S.onHome && S.lastCheck;
-  $("watch-text").textContent = S.settings.paused ? "Paused" : S.busy ? "Checking…" : watching ? "Watching quietly" : S.lastCheck ? "Away from home" : "Starting…";
-  $("last-check").textContent = S.busy ? S.progress || "" : S.lastCheck ? `Checked ${ago(S.lastCheck)}` : "";
+  $("watch-text").textContent = S.settings.paused ? t("Paused") : S.busy ? t("Checking…") : watching ? t("Watching quietly") : S.lastCheck ? t("Away from home") : t("Starting…");
+  $("last-check").textContent = S.busy ? S.progress || "" : S.lastCheck ? t("Checked {when}", { when: ago(S.lastCheck) }) : "";
   $("watch-dot").className = `dot-live${S.busy ? " busy" : watching ? "" : " off"}`;
   $("update-banner").hidden = !S.update;
-  $("update-text").textContent = S.update ? `Porchlight ${S.update} is ready: newer checks and fixes.` : "";
+  $("update-text").textContent = S.update ? t("Porchlight {v} is ready: newer checks and fixes.", { v: S.update }) : "";
   $("away").hidden = !S.lastCheck || S.onHome;
   $("away").textContent = S.status;
   // One view failing must never blank the others.
@@ -640,7 +663,7 @@ function settlePending() {
   const still = S.findings.some((f) => fkey(f) === pending.key);
   if (still) { pending.result = "still"; pending.since = S.lastCheck; return; }
   const left = openFindings().length;
-  toast(`Fixed: ${pending.title}. ${left ? `${cap(count(left, "thing"))} left.` : "That was the last one."}`);
+  toast(`${t("Fixed: {title}.", { title: pending.title })} ${left ? t("{count} left.", { count: cap(count(left, "thing")) }) : t("That was the last one.")}`);
   pending = null;
 }
 
@@ -650,38 +673,38 @@ for (const b of document.querySelectorAll("[data-goto]")) b.addEventListener("cl
 for (const b of document.querySelectorAll("[data-dev]")) b.addEventListener("click", () => { devFilter = b.dataset.dev; for (const x of document.querySelectorAll("[data-dev]")) { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); } renderDevices(true); });
 $("check-now").addEventListener("click", () => invoke("check_now", { full: true }));
 $("mark-read").addEventListener("click", () => invoke("mark_read"));
-const saveSettings = () => invoke("set_settings", { intervalMin: Number($("s-interval").value), notify: $("s-notify").checked, homeSsid: $("s-ssid").value || null, autostart: $("s-autostart").checked });
-for (const id of ["s-autostart", "s-notify", "s-interval", "s-ssid"]) $(id).addEventListener("change", saveSettings);
-$("s-router").addEventListener("click", () => invoke("accept_router").then(() => toast("Okay. Porchlight will learn your new router on the next check.")));
+const saveSettings = () => invoke("set_settings", { intervalMin: Number($("s-interval").value), notify: $("s-notify").checked, homeSsid: $("s-ssid").value || null, autostart: $("s-autostart").checked, lang: $("s-lang").value || null });
+for (const id of ["s-autostart", "s-notify", "s-interval", "s-ssid", "s-lang"]) $(id).addEventListener("change", saveSettings);
+$("s-router").addEventListener("click", () => invoke("accept_router").then(() => toast(t("Okay. Porchlight will learn your new router on the next check."))));
 $("s-home").addEventListener("click", () => invoke("set_home_here"));
 $("s-forget").addEventListener("click", async () => {
   const b = $("s-forget");
-  if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Click again to delete everything"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Forget everything"; }, 4000); return; }
+  if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = t("Click again to delete everything"); setTimeout(() => { b.dataset.sure = ""; b.textContent = t("Forget everything"); }, 4000); return; }
   await invoke("forget_everything");
 });
 const install = async (b) => {
   b.disabled = true;
-  b.textContent = "Installing…";
-  try { await invoke("install_update"); } catch (e) { b.disabled = false; b.textContent = "Install update"; $("u-text").textContent = String(e); }
+  b.textContent = t("Installing…");
+  try { await invoke("install_update"); } catch (e) { b.disabled = false; b.textContent = t("Install update"); $("u-text").textContent = String(e); }
 };
 $("update-go").addEventListener("click", (e) => install(e.currentTarget));
 $("u-install").addEventListener("click", (e) => install(e.currentTarget));
 $("u-check").addEventListener("click", async (e) => {
   const b = e.currentTarget;
   b.disabled = true;
-  b.textContent = "Checking…";
+  b.textContent = t("Checking…");
   const v = await invoke("check_update").catch(() => null);
   b.disabled = false;
-  b.textContent = "Check for updates";
-  $("u-text").textContent = v ? "A signed update is ready. Install it whenever you like." : "You have the latest version. Porchlight checks again tomorrow.";
+  b.textContent = t("Check for updates");
+  $("u-text").textContent = v ? t("A signed update is ready. Install it whenever you like.") : t("You have the latest version. Porchlight checks again tomorrow.");
 });
 $("h-issue").addEventListener("click", () => invoke("open_link", { which: "issues" }));
 $("p-notes").addEventListener("click", () => invoke("open_link", { which: "privacy" }));
 $("h-diag").addEventListener("click", async () => {
-  try { const path = await invoke("export_diagnostics"); $("h-done").textContent = `Saved to ${path}. Attach it to your report.`; }
-  catch (e) { $("h-done").textContent = `Couldn't save the file: ${e}`; }
+  try { const path = await invoke("export_diagnostics"); $("h-done").textContent = t("Saved to {path}. Attach it to your report.", { path }); }
+  catch (e) { $("h-done").textContent = t("Couldn't save the file: {e}", { e }); }
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && (editing || naming)) { editing = null; naming = null; render(true); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && (editing || naming || guideFor)) { editing = null; naming = null; guideFor = null; render(true); } });
 
 T.event.listen("state", (e) => { S = e.payload; settlePending(); render(); });
 invoke("get_state").then((s) => { S = s; render(true); go("home"); });

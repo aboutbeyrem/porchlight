@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- The installer's welcome and finish pages: 164 x 314. Rendered to sidebar.bmp by scripts/make-installer-art.mjs. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 164px; height: 314px; overflow: hidden; }
+  body { position: relative; background: linear-gradient(180deg, #0b1122 0%, #121a2e 55%, #182240 100%); font-family: "Sitka Display", "Sitka Heading", Georgia, serif; }
+  .glow { position: absolute; left: -60px; top: -50px; width: 284px; height: 230px; background: radial-gradient(closest-side, rgba(242, 181, 68, 0.34), rgba(242, 181, 68, 0.08) 60%, transparent); }
+  .star { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #eceff7; }
+  svg { position: absolute; }
+  .lamp { left: 59px; top: 40px; width: 46px; fill: none; stroke: #f2b544; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .lamp .glass { fill: #ffd27a; stroke: none; }
+  .name { position: absolute; top: 116px; width: 100%; text-align: center; color: #eceff7; font-size: 25px; letter-spacing: 0.2px; }
+  .rule { position: absolute; top: 158px; left: 70px; width: 24px; height: 1px; background: #e3c062; opacity: 0.8; }
+  .house { left: 22px; top: 196px; width: 120px; }
+  .ground { position: absolute; left: 0; right: 0; top: 296px; height: 1px; background: rgba(236, 239, 247, 0.14); }
+  .spill { position: absolute; left: 50px; top: 297px; width: 64px; height: 17px; background: radial-gradient(60% 100% at 50% 0%, rgba(242, 181, 68, 0.38), transparent); }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <i class="star" style="left:18px;top:24px;opacity:.5"></i>
+  <i class="star" style="left:140px;top:30px;opacity:.35"></i>
+  <i class="star" style="left:128px;top:84px;opacity:.25"></i>
+  <i class="star" style="left:26px;top:96px;opacity:.3"></i>
+  <i class="star" style="left:150px;top:150px;opacity:.2"></i>
+  <svg class="lamp" viewBox="0 0 64 72" aria-hidden="true"><path d="M18 6h28M32 6v8" /><path d="M21 14h22l5 24H16z" /><ellipse cx="32" cy="30" rx="8" ry="9" class="glass" /></svg>
+  <div class="name">Porchlight</div>
+  <div class="rule"></div>
+  <!-- A house at night, its porch light on. -->
+  <svg class="house" viewBox="0 0 120 100" aria-hidden="true">
+    <defs><radialGradient id="g"><stop offset="0" stop-color="#f2b544" stop-opacity=".9" /><stop offset="1" stop-color="#f2b544" stop-opacity="0" /></radialGradient></defs>
+    <path d="M14 46L60 12l46 34" fill="none" stroke="rgba(236,239,247,.32)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" />
+    <path d="M22 40v60h76V40" fill="rgba(11,17,34,.55)" stroke="rgba(236,239,247,.32)" stroke-width="1.6" stroke-linejoin="round" />
+    <rect x="31" y="54" width="16" height="14" rx="1.5" fill="rgba(236,239,247,.06)" stroke="rgba(236,239,247,.22)" stroke-width="1.2" />
+    <rect x="73" y="54" width="16" height="14" rx="1.5" fill="rgba(236,239,247,.06)" stroke="rgba(236,239,247,.22)" stroke-width="1.2" />
+    <rect x="52" y="70" width="16" height="30" rx="1.5" fill="rgba(242,181,68,.16)" stroke="rgba(242,181,68,.55)" stroke-width="1.2" />
+    <circle cx="75" cy="76" r="12" fill="url(#g)" opacity=".7" />
+    <circle cx="75" cy="76" r="2.4" fill="#ffd27a" />
+  </svg>
+  <div class="ground"></div>
+  <div class="spill"></div>
+</body>
+</html>

@@ -2,6 +2,8 @@
 //! worth telling you. It remembers devices, alerts and settings in a small file on this computer only.
 
 use crate::checks::{self, DeepResult};
+use crate::i18n::Lang;
+use crate::tx;
 use crate::names::{self, Mapping, Upnp};
 use crate::net::{self, mac_str, Network};
 use crate::wifi::{self, AccessPoint, SavedNetwork, Survey};
@@ -83,10 +85,12 @@ pub struct Settings {
     pub notify: bool,
     pub home_ssid: Option<String>,
     pub paused: bool,
+    /// "en", "fr", "ar", or nothing to follow Windows.
+    pub lang: Option<String>,
 }
 impl Default for Settings {
     fn default() -> Self {
-        Settings { consented: false, interval_min: 10, notify: true, home_ssid: None, paused: false }
+        Settings { consented: false, interval_min: 10, notify: true, home_ssid: None, paused: false, lang: None }
     }
 }
 
@@ -154,6 +158,10 @@ pub struct State {
 }
 
 impl State {
+    /// The language Porchlight speaks: the one chosen in Settings, or Windows' own.
+    pub fn lang(&self) -> Lang {
+        Lang::from_setting(self.settings.lang.as_deref())
+    }
     pub fn load(path: &Path) -> State {
         std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_else(|| State { version: 1, ..Default::default() })
     }
@@ -253,26 +261,51 @@ fn kind_of(d: &Device) -> String {
     "device".into()
 }
 
-fn name_of(d: &Device) -> String {
+fn name_of(d: &Device, l: Lang) -> String {
     if let Some(n) = d.custom_name.as_ref().filter(|n| !n.trim().is_empty()) {
         return n.clone();
     }
     if d.is_self {
-        return "This computer".into();
+        return tx!(l, "This computer", "Cet ordinateur", "هذا الحاسوب");
     }
     if d.is_router {
-        return d.upnp_name.as_ref().map(|n| format!("Your router ({n})")).unwrap_or_else(|| "Your router".into());
+        let r = tx!(l, "Your router", "Votre routeur", "الراوتر");
+        return d.upnp_name.as_ref().map(|n| format!("{r} ({n})")).unwrap_or(r);
     }
     if let Some(n) = own_name(d) {
         return n.to_string();
     }
     let kind = &d.kind;
+    let label = kind_label(kind, l);
     match &d.vendor {
-        Some(v) if kind == "device" => format!("{v} device"),
-        Some(v) if kind.to_lowercase().contains(&v.to_lowercase()) => cap(kind),
-        Some(v) => format!("{v} {kind}"),
-        None => cap(kind),
+        Some(v) if kind == "device" => tx!(l, format!("{v} device"), format!("Appareil {v}"), format!("جهاز {v}")),
+        Some(v) if kind.to_lowercase().contains(&v.to_lowercase()) => cap(&label),
+        Some(v) => tx!(l, format!("{v} {label}"), cap(&format!("{label} {v}")), format!("{label} {v}")),
+        None => cap(&label),
     }
+}
+
+/// A device kind (kept in English inside Porchlight) in the chosen language.
+pub fn kind_label(kind: &str, l: Lang) -> String {
+    let (fr, ar) = match kind {
+        "router" => ("routeur", "راوتر"),
+        "this computer" => ("cet ordinateur", "هذا الحاسوب"),
+        "camera" => ("caméra", "كاميرا"),
+        "Wi-Fi extender" => ("répéteur Wi-Fi", "مقوّي واي فاي"),
+        "TV or streaming device" => ("TV ou boîtier de streaming", "تلفاز أو جهاز بث"),
+        "printer" => ("imprimante", "طابعة"),
+        "phone or tablet" => ("téléphone ou tablette", "هاتف أو لوحي"),
+        "smart-home device" => ("appareil connecté", "جهاز منزل ذكي"),
+        "Apple phone, tablet or computer" => ("téléphone, tablette ou ordinateur Apple", "هاتف أو لوحي أو حاسوب من Apple"),
+        "computer" => ("ordinateur", "حاسوب"),
+        "Windows computer" => ("ordinateur Windows", "حاسوب Windows"),
+        "phone, tablet or Mac" => ("téléphone, tablette ou Mac", "هاتف أو لوحي أو Mac"),
+        "device on your extender" => ("appareil sur votre répéteur", "جهاز على المقوّي"),
+        "phone, tablet or laptop" => ("téléphone, tablette ou portable", "هاتف أو لوحي أو حاسوب محمول"),
+        "device" => ("appareil", "جهاز"),
+        other => (other, other),
+    };
+    tx!(l, kind, fr, ar)
 }
 fn cap(s: &str) -> String {
     let mut c = s.chars();
@@ -413,127 +446,219 @@ fn wifi_view(survey: &Survey, home: Option<&str>, devices: &BTreeMap<String, Dev
     (v, real_aps, copies)
 }
 
-// ---------- findings, in plain words ----------
+// ---------- findings, in plain words (English, French, Arabic) ----------
 #[allow(clippy::too_many_arguments)]
-fn f(id: &str, level: &str, device: Option<&Device>, title: String, found: String, means: &str, likely: &str, fix: &[&str]) -> Finding {
-    Finding { id: id.into(), level: level.into(), title, found, means: means.into(), likely: likely.into(), fix: fix.iter().map(|s| s.to_string()).collect(), device: device.map(|d| d.key.clone()) }
+fn f(id: &str, level: &str, device: Option<&Device>, title: String, found: String, means: String, likely: String, fix: Vec<String>) -> Finding {
+    Finding { id: id.into(), level: level.into(), title, found, means, likely, fix, device: device.map(|d| d.key.clone()) }
 }
 
-fn device_findings(d: &Device, mappings: &[Mapping], out: &mut Vec<Finding>) {
+/// Where one of your Wi-Fi networks comes from, in the chosen language.
+fn source_label(l: Lang, source: &str) -> String {
+    match source {
+        "home" => tx!(l, "your Wi-Fi", "votre Wi-Fi", "شبكتك"),
+        "second network from your router" => tx!(l, "a second network from your router", "un second réseau de votre routeur", "شبكة ثانية من الراوتر"),
+        "your extender" => tx!(l, "your extender", "votre répéteur", "المقوّي"),
+        other => other.to_string(),
+    }
+}
+
+fn device_findings(d: &Device, mappings: &[Mapping], out: &mut Vec<Finding>, l: Lang) {
     let Some(deep) = &d.deep else { return };
     let n = format!("{} ({})", d.name, d.ip);
     let has = |p: u16| deep.ports.contains(&p);
     let forwarded = |p: u16| mappings.iter().any(|m| m.internal_client == d.ip && m.internal_port == p);
+    let check_again = || tx!(l, "Check again in Porchlight.", "Vérifiez de nouveau dans Porchlight.", "افحص مرة أخرى في Porchlight.");
+    let needs_network = || tx!(l, "Moderate: it needs someone on your network.", "Modéré : il faut quelqu'un sur votre réseau.", "متوسط: يتطلب وجود شخص على شبكتك.");
     if has(23) || has(2323) {
         let p = if has(23) { 23 } else { 2323 };
-        out.push(f("PL-TELNET", "fix-soon", Some(d), "Old remote-login service (Telnet) is on".into(), format!("{n} accepts Telnet, an old way to log into a device remotely."),
-            "Telnet sends passwords as readable text, and it's the main door automated attacks use to take over cameras and routers.",
-            if forwarded(p) { "High: your router forwards it to the internet." } else { "Moderate: someone would need to be on your network, or another device on it would need to be infected first." },
-            &["Open the device's app or settings page.", "Look for Telnet, Remote access or Debug mode and turn it off.", "If there's no switch, update the firmware.", "Check again in Porchlight."]));
+        out.push(f("PL-TELNET", "fix-soon", Some(d),
+            tx!(l, "Old remote-login service (Telnet) is on", "Un ancien service de connexion à distance (Telnet) est actif", "خدمة دخول عن بُعد قديمة (Telnet) مفعّلة"),
+            tx!(l, format!("{n} accepts Telnet, an old way to log into a device remotely."), format!("{n} accepte Telnet, une ancienne façon de se connecter à distance à un appareil."), format!("{n} يقبل Telnet، وهي طريقة قديمة للدخول إلى جهاز عن بُعد.")),
+            tx!(l, "Telnet sends passwords as readable text, and it's the main door automated attacks use to take over cameras and routers.", "Telnet envoie les mots de passe en clair, et c'est la porte principale qu'utilisent les attaques automatiques pour prendre le contrôle des caméras et des routeurs.", "يرسل Telnet كلمات المرور نصاً مقروءاً، وهو الباب الرئيسي الذي تستخدمه الهجمات الآلية للسيطرة على الكاميرات والراوترات."),
+            if forwarded(p) { tx!(l, "High: your router forwards it to the internet.", "Élevé : votre routeur l'ouvre sur Internet.", "مرتفع: الراوتر يفتحه على الإنترنت.") } else { tx!(l, "Moderate: someone would need to be on your network, or another device on it would need to be infected first.", "Modéré : il faudrait quelqu'un sur votre réseau, ou qu'un autre appareil soit d'abord infecté.", "متوسط: يتطلب وجود شخص على شبكتك، أو إصابة جهاز آخر فيها أولاً.") },
+            vec![tx!(l, "Open the device's app or settings page.", "Ouvrez l'application ou la page de réglages de l'appareil.", "افتح تطبيق الجهاز أو صفحة إعداداته."),
+                 tx!(l, "Look for Telnet, Remote access or Debug mode and turn it off.", "Cherchez Telnet, Accès à distance ou Mode débogage et désactivez-le.", "ابحث عن Telnet أو الوصول عن بُعد أو وضع التصحيح وأوقفه."),
+                 tx!(l, "If there's no switch, update the firmware.", "S'il n'y a pas d'option, mettez à jour le micrologiciel.", "إن لم يوجد خيار، حدّث البرنامج الثابت."),
+                 check_again()]));
     }
     if deep.rtsp_open {
-        out.push(f("PL-RTSP-OPEN", if forwarded(554) { "fix-soon" } else { "worth-fixing" }, Some(d), "Camera video can be watched without a password".into(), format!("{n} sends its live video to anyone who asks, without a password."),
-            "Anyone connected to your Wi-Fi can open the video feed.", "Moderate: it needs someone on your Wi-Fi, like a guest or a neighbour who knows the password.",
-            &["Open the camera's app or web page.", "Turn on \"Authentication\" for RTSP (sometimes called \"RTSP password\").", "If you don't use the camera with other apps, turn RTSP off.", "Check again in Porchlight."]));
+        out.push(f("PL-RTSP-OPEN", if forwarded(554) { "fix-soon" } else { "worth-fixing" }, Some(d),
+            tx!(l, "Camera video can be watched without a password", "La vidéo de la caméra peut être regardée sans mot de passe", "يمكن مشاهدة فيديو الكاميرا دون كلمة مرور"),
+            tx!(l, format!("{n} sends its live video to anyone who asks, without a password."), format!("{n} envoie sa vidéo en direct à quiconque la demande, sans mot de passe."), format!("{n} يرسل بثه المباشر لأي شخص يطلبه، دون كلمة مرور.")),
+            tx!(l, "Anyone connected to your Wi-Fi can open the video feed.", "Toute personne connectée à votre Wi-Fi peut ouvrir le flux vidéo.", "يستطيع أي شخص متصل بشبكتك فتح البث."),
+            tx!(l, "Moderate: it needs someone on your Wi-Fi, like a guest or a neighbour who knows the password.", "Modéré : il faut quelqu'un sur votre Wi-Fi, comme un invité ou un voisin qui connaît le mot de passe.", "متوسط: يتطلب شخصاً على شبكتك، كضيف أو جار يعرف كلمة المرور."),
+            vec![tx!(l, "Open the camera's app or web page.", "Ouvrez l'application ou la page web de la caméra.", "افتح تطبيق الكاميرا أو صفحتها على الويب."),
+                 tx!(l, "Turn on \"Authentication\" for RTSP (sometimes called \"RTSP password\").", "Activez « Authentification » pour RTSP (parfois appelée « mot de passe RTSP »).", "فعّل \"Authentication\" لبروتوكول RTSP (تسمى أحياناً \"RTSP password\")."),
+                 tx!(l, "If you don't use the camera with other apps, turn RTSP off.", "Si vous n'utilisez pas la caméra avec d'autres applications, désactivez RTSP.", "إن كنت لا تستخدم الكاميرا مع تطبيقات أخرى، أوقف RTSP."),
+                 check_again()]));
     }
     if has(21) {
-        out.push(f("PL-FTP", "worth-fixing", Some(d), "Old file-sharing service (FTP) is on".into(),
-            if d.is_router { "Your router runs an FTP server: an old way of sharing files (usually a USB drive plugged into the router) that sends passwords and files unencrypted.".into() } else { format!("{n} runs FTP, an old way of sharing files that sends passwords and files unencrypted.") },
-            "Someone on your network could read the FTP password while it's being used, then open the shared files.", "Low to moderate: it needs someone already on your network.",
-            if d.is_router { &["Open your router's settings page and log in.", "Look under USB, Storage or File sharing and turn FTP off.", "If you share a USB drive this way, keep it on but give it a strong password."] } else { &["In the device's settings, turn off FTP.", "If you need file sharing, use the device's app or SFTP instead."] }));
+        out.push(f("PL-FTP", "worth-fixing", Some(d),
+            tx!(l, "Old file-sharing service (FTP) is on", "Un ancien service de partage de fichiers (FTP) est actif", "خدمة مشاركة ملفات قديمة (FTP) مفعّلة"),
+            if d.is_router { tx!(l, "Your router runs an FTP server: an old way of sharing files (usually a USB drive plugged into the router) that sends passwords and files unencrypted.", "Votre routeur fait tourner un serveur FTP : une ancienne façon de partager des fichiers (souvent une clé USB branchée sur le routeur) qui envoie mots de passe et fichiers sans chiffrement.", "يشغّل الراوتر خادم FTP: طريقة قديمة لمشاركة الملفات (عادةً قرص USB موصول بالراوتر) ترسل كلمات المرور والملفات دون تشفير.") }
+            else { tx!(l, format!("{n} runs FTP, an old way of sharing files that sends passwords and files unencrypted."), format!("{n} fait tourner FTP, une ancienne façon de partager des fichiers qui envoie mots de passe et fichiers sans chiffrement."), format!("{n} يشغّل FTP، وهي طريقة قديمة لمشاركة الملفات ترسل كلمات المرور والملفات دون تشفير.")) },
+            tx!(l, "Someone on your network could read the FTP password while it's being used, then open the shared files.", "Quelqu'un sur votre réseau pourrait lire le mot de passe FTP pendant son utilisation, puis ouvrir les fichiers partagés.", "قد يقرأ شخص على شبكتك كلمة مرور FTP أثناء استخدامها، ثم يفتح الملفات المشتركة."),
+            tx!(l, "Low to moderate: it needs someone already on your network.", "Faible à modéré : il faut quelqu'un déjà sur votre réseau.", "منخفض إلى متوسط: يتطلب شخصاً موجوداً على شبكتك."),
+            if d.is_router { vec![
+                tx!(l, "Open your router's settings page and log in.", "Ouvrez la page de réglages de votre routeur et connectez-vous.", "افتح صفحة إعدادات الراوتر وسجّل الدخول."),
+                tx!(l, "Look under USB, Storage or File sharing and turn FTP off.", "Dans USB, Stockage ou Partage de fichiers, désactivez FTP.", "في قسم USB أو التخزين أو مشاركة الملفات، أوقف FTP."),
+                tx!(l, "If you share a USB drive this way, keep it on but give it a strong password.", "Si vous partagez une clé USB ainsi, gardez-le mais donnez-lui un mot de passe solide.", "إن كنت تشارك قرص USB بهذه الطريقة، أبقه مفعّلاً لكن بكلمة مرور قوية.")] }
+            else { vec![
+                tx!(l, "In the device's settings, turn off FTP.", "Dans les réglages de l'appareil, désactivez FTP.", "في إعدادات الجهاز، أوقف FTP."),
+                tx!(l, "If you need file sharing, use the device's app or SFTP instead.", "Si vous avez besoin de partager des fichiers, utilisez plutôt l'application de l'appareil ou SFTP.", "إن احتجت مشاركة الملفات، استخدم تطبيق الجهاز أو SFTP بدلاً منه.")] }));
     }
     if deep.smb1 {
-        out.push(f("PL-SMB1", "worth-fixing", Some(d), "Old file-sharing protocol SMBv1 is on".into(), format!("{n} still accepts SMB version 1, the Windows file-sharing protocol from the 1990s."),
-            "SMBv1 has no protection against tampering, and it's what the 2017 WannaCry outbreak spread through on unpatched Windows.", "Low to moderate: it needs someone on your network.",
-            if d.is_router { &["Open your router's settings page and log in.", "Under USB, Storage or File sharing (Samba), set the minimum SMB version to SMB2, or turn file sharing off."] } else { &["Open PowerShell as administrator and run: Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol", "Restart, then check again."] }));
+        out.push(f("PL-SMB1", "worth-fixing", Some(d),
+            tx!(l, "Old file-sharing protocol SMBv1 is on", "L'ancien protocole de partage SMBv1 est actif", "بروتوكول المشاركة القديم SMBv1 مفعّل"),
+            tx!(l, format!("{n} still accepts SMB version 1, the Windows file-sharing protocol from the 1990s."), format!("{n} accepte encore SMB version 1, le protocole de partage de fichiers Windows des années 1990."), format!("{n} لا يزال يقبل الإصدار الأول من SMB، بروتوكول مشاركة الملفات في Windows من تسعينيات القرن الماضي.")),
+            tx!(l, "SMBv1 has no protection against tampering, and it's what the 2017 WannaCry outbreak spread through on unpatched Windows.", "SMBv1 n'a aucune protection contre la falsification, et c'est par lui que WannaCry s'est propagé en 2017 sur les Windows non mis à jour.", "لا يحمي SMBv1 من العبث، وعبره انتشر فيروس WannaCry عام 2017 على أنظمة Windows غير المحدّثة."),
+            tx!(l, "Low to moderate: it needs someone on your network.", "Faible à modéré : il faut quelqu'un sur votre réseau.", "منخفض إلى متوسط: يتطلب شخصاً على شبكتك."),
+            if d.is_router { vec![
+                tx!(l, "Open your router's settings page and log in.", "Ouvrez la page de réglages de votre routeur et connectez-vous.", "افتح صفحة إعدادات الراوتر وسجّل الدخول."),
+                tx!(l, "Under USB, Storage or File sharing (Samba), set the minimum SMB version to SMB2, or turn file sharing off.", "Dans USB, Stockage ou Partage de fichiers (Samba), réglez la version SMB minimale sur SMB2, ou désactivez le partage.", "في قسم USB أو التخزين أو مشاركة الملفات (Samba)، اضبط أدنى إصدار SMB على SMB2، أو أوقف المشاركة.")] }
+            else { vec![
+                tx!(l, "Open PowerShell as administrator and run: Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol", "Ouvrez PowerShell en administrateur et lancez : Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol", "افتح PowerShell كمسؤول وشغّل: Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol"),
+                tx!(l, "Restart, then check again.", "Redémarrez, puis vérifiez de nouveau.", "أعد التشغيل، ثم افحص مرة أخرى.")] }));
     }
     if deep.rdp_no_nla {
-        out.push(f("PL-RDP-NLA", if forwarded(3389) { "fix-soon" } else { "worth-fixing" }, Some(d), "Remote Desktop doesn't require sign-in first".into(), format!("{n} lets anyone reach its Windows sign-in screen over Remote Desktop before proving who they are."),
-            "With Network Level Authentication on, Windows checks the password before starting a session; without it, flaws that work before sign-in (like BlueKeep) are reachable.", "Moderate: it needs someone on your network.",
-            &["On that computer: Settings → System → Remote Desktop → Advanced settings.", "Tick \"Require computers to use Network Level Authentication to connect\"."]));
+        out.push(f("PL-RDP-NLA", if forwarded(3389) { "fix-soon" } else { "worth-fixing" }, Some(d),
+            tx!(l, "Remote Desktop doesn't require sign-in first", "Le Bureau à distance ne demande pas d'identification d'abord", "سطح المكتب البعيد لا يشترط تسجيل الدخول أولاً"),
+            tx!(l, format!("{n} lets anyone reach its Windows sign-in screen over Remote Desktop before proving who they are."), format!("{n} laisse n'importe qui atteindre son écran de connexion Windows par le Bureau à distance avant de prouver son identité."), format!("{n} يسمح لأي شخص بالوصول إلى شاشة تسجيل الدخول عبر سطح المكتب البعيد قبل إثبات هويته.")),
+            tx!(l, "With Network Level Authentication on, Windows checks the password before starting a session; without it, flaws that work before sign-in (like BlueKeep) are reachable.", "Avec l'authentification au niveau du réseau, Windows vérifie le mot de passe avant d'ouvrir une session ; sans elle, des failles qui agissent avant la connexion (comme BlueKeep) sont accessibles.", "مع المصادقة على مستوى الشبكة، يتحقق Windows من كلمة المرور قبل بدء الجلسة؛ ودونها تصبح الثغرات التي تعمل قبل تسجيل الدخول (مثل BlueKeep) قابلة للاستغلال."),
+            needs_network(),
+            vec![tx!(l, "On that computer: Settings → System → Remote Desktop → Advanced settings.", "Sur cet ordinateur : Paramètres → Système → Bureau à distance → Paramètres avancés.", "على ذلك الحاسوب: الإعدادات ← النظام ← سطح المكتب البعيد ← الإعدادات المتقدمة."),
+                 tx!(l, "Tick \"Require computers to use Network Level Authentication to connect\".", "Cochez « Exiger que les ordinateurs utilisent l'authentification au niveau du réseau pour se connecter ».", "فعّل خيار \"اشتراط استخدام المصادقة على مستوى الشبكة للاتصال\".")]));
     }
     if has(5555) {
-        out.push(f("PL-ADB", "worth-fixing", Some(d), "Android debugging is open to the network".into(), format!("{n} accepts connections on the Android debugging port. This is common on Android TV boxes."),
-            "On many devices this lets anyone on your network install apps and control the device without a password.", "Moderate: malware that spreads between Android TV boxes looks for exactly this port.",
-            &["On the device: Settings → Developer options.", "Turn off \"USB debugging\", \"Network debugging\" or \"ADB debugging\".", "If you can't find Developer options, check for a firmware update."]));
+        out.push(f("PL-ADB", "worth-fixing", Some(d),
+            tx!(l, "Android debugging is open to the network", "Le débogage Android est ouvert sur le réseau", "تصحيح أخطاء Android مفتوح على الشبكة"),
+            tx!(l, format!("{n} accepts connections on the Android debugging port. This is common on Android TV boxes."), format!("{n} accepte des connexions sur le port de débogage Android. C'est fréquent sur les boîtiers Android TV."), format!("{n} يقبل الاتصالات على منفذ تصحيح أخطاء Android. هذا شائع في أجهزة Android TV.")),
+            tx!(l, "On many devices this lets anyone on your network install apps and control the device without a password.", "Sur beaucoup d'appareils, cela permet à n'importe qui sur votre réseau d'installer des applications et de contrôler l'appareil sans mot de passe.", "في كثير من الأجهزة، يتيح هذا لأي شخص على شبكتك تثبيت التطبيقات والتحكم بالجهاز دون كلمة مرور."),
+            tx!(l, "Moderate: malware that spreads between Android TV boxes looks for exactly this port.", "Modéré : les logiciels malveillants qui se propagent entre boîtiers Android TV cherchent justement ce port.", "متوسط: البرمجيات الخبيثة التي تنتشر بين أجهزة Android TV تبحث عن هذا المنفذ تحديداً."),
+            vec![tx!(l, "On the device: Settings → Developer options.", "Sur l'appareil : Paramètres → Options pour les développeurs.", "على الجهاز: الإعدادات ← خيارات المطوّر."),
+                 tx!(l, "Turn off \"USB debugging\", \"Network debugging\" or \"ADB debugging\".", "Désactivez « Débogage USB », « Débogage réseau » ou « Débogage ADB ».", "أوقف \"تصحيح USB\" أو \"تصحيح الشبكة\" أو \"تصحيح ADB\"."),
+                 tx!(l, "If you can't find Developer options, check for a firmware update.", "Si vous ne trouvez pas les options pour les développeurs, cherchez une mise à jour du micrologiciel.", "إن لم تجد خيارات المطوّر، ابحث عن تحديث للبرنامج الثابت.")]));
     }
     if has(5900) {
-        out.push(f("PL-VNC", "worth-fixing", Some(d), "Remote screen control (VNC) is on".into(), format!("{n} lets people control its screen remotely."),
-            "Many VNC setups use a short password or none, which would let someone on your network see and control the screen.", "Moderate: it needs someone on your network.",
-            &["If you don't use remote control, turn VNC off.", "If you do, set a long password (12+ characters)."]));
+        out.push(f("PL-VNC", "worth-fixing", Some(d),
+            tx!(l, "Remote screen control (VNC) is on", "Le contrôle d'écran à distance (VNC) est actif", "التحكم بالشاشة عن بُعد (VNC) مفعّل"),
+            tx!(l, format!("{n} lets people control its screen remotely."), format!("{n} permet de contrôler son écran à distance."), format!("{n} يسمح بالتحكم بشاشته عن بُعد.")),
+            tx!(l, "Many VNC setups use a short password or none, which would let someone on your network see and control the screen.", "Beaucoup d'installations VNC utilisent un mot de passe court ou aucun, ce qui permettrait à quelqu'un sur votre réseau de voir et contrôler l'écran.", "كثير من إعدادات VNC تستخدم كلمة مرور قصيرة أو بلا كلمة مرور، مما يتيح لشخص على شبكتك رؤية الشاشة والتحكم بها."),
+            needs_network(),
+            vec![tx!(l, "If you don't use remote control, turn VNC off.", "Si vous n'utilisez pas le contrôle à distance, désactivez VNC.", "إن كنت لا تستخدم التحكم عن بُعد، أوقف VNC."),
+                 tx!(l, "If you do, set a long password (12+ characters).", "Sinon, choisissez un long mot de passe (12 caractères ou plus).", "وإن كنت تستخدمه، ضع كلمة مرور طويلة (12 حرفاً أو أكثر).")]));
     }
     if has(2375) {
-        out.push(f("PL-DOCKER", "worth-fixing", Some(d), "Docker can be controlled over the network without a password".into(), format!("{n} accepts Docker remote-control connections on port 2375."),
-            "Anyone on your network who connects can start programs on that computer with full control.", "Moderate: automated tools look for this port.",
-            &["Docker Desktop → Settings → General: untick \"Expose daemon on tcp://localhost:2375\"."]));
+        out.push(f("PL-DOCKER", "worth-fixing", Some(d),
+            tx!(l, "Docker can be controlled over the network without a password", "Docker peut être contrôlé par le réseau sans mot de passe", "يمكن التحكم بـ Docker عبر الشبكة دون كلمة مرور"),
+            tx!(l, format!("{n} accepts Docker remote-control connections on port 2375."), format!("{n} accepte des connexions de contrôle Docker sur le port 2375."), format!("{n} يقبل اتصالات التحكم بـ Docker على المنفذ 2375.")),
+            tx!(l, "Anyone on your network who connects can start programs on that computer with full control.", "Toute personne sur votre réseau qui s'y connecte peut lancer des programmes sur cet ordinateur avec un contrôle total.", "يستطيع أي شخص على شبكتك يتصل به تشغيل برامج على ذلك الحاسوب بتحكم كامل."),
+            tx!(l, "Moderate: automated tools look for this port.", "Modéré : des outils automatiques cherchent ce port.", "متوسط: أدوات آلية تبحث عن هذا المنفذ."),
+            vec![tx!(l, "Docker Desktop → Settings → General: untick \"Expose daemon on tcp://localhost:2375\".", "Docker Desktop → Settings → General : décochez « Expose daemon on tcp://localhost:2375 ».", "Docker Desktop ← Settings ← General: ألغِ تحديد \"Expose daemon on tcp://localhost:2375\".")]));
     }
     if has(34567) {
-        out.push(f("PL-XMEYE", "worth-fixing", Some(d), "Remote-viewing service with a history of security flaws".into(), format!("{n} runs the \"XMEye\" service used by many low-cost cameras and recorders."),
-            "This service has had several serious, publicly known flaws; older firmware is the main risk.", "Moderate: it's reachable inside your network.",
-            &["Update the recorder or camera firmware.", "Turn off \"Cloud\" / \"P2P\" access if you don't watch it away from home."]));
+        out.push(f("PL-XMEYE", "worth-fixing", Some(d),
+            tx!(l, "Remote-viewing service with a history of security flaws", "Service de visionnage à distance connu pour ses failles", "خدمة مشاهدة عن بُعد لها تاريخ من الثغرات الأمنية"),
+            tx!(l, format!("{n} runs the \"XMEye\" service used by many low-cost cameras and recorders."), format!("{n} fait tourner le service « XMEye » utilisé par beaucoup de caméras et enregistreurs bon marché."), format!("{n} يشغّل خدمة \"XMEye\" المستخدمة في كثير من الكاميرات والمسجّلات الرخيصة.")),
+            tx!(l, "This service has had several serious, publicly known flaws; older firmware is the main risk.", "Ce service a connu plusieurs failles graves et publiques ; un micrologiciel ancien est le principal risque.", "عانت هذه الخدمة من عدة ثغرات خطيرة معروفة؛ والبرنامج الثابت القديم هو الخطر الأكبر."),
+            tx!(l, "Moderate: it's reachable inside your network.", "Modéré : il est accessible à l'intérieur de votre réseau.", "متوسط: يمكن الوصول إليه داخل شبكتك."),
+            vec![tx!(l, "Update the recorder or camera firmware.", "Mettez à jour le micrologiciel de l'enregistreur ou de la caméra.", "حدّث البرنامج الثابت للمسجّل أو الكاميرا."),
+                 tx!(l, "Turn off \"Cloud\" / \"P2P\" access if you don't watch it away from home.", "Désactivez l'accès « Cloud » / « P2P » si vous ne le regardez pas hors de chez vous.", "أوقف الوصول عبر \"Cloud\" / \"P2P\" إن كنت لا تشاهده خارج المنزل.")]));
     }
     if has(1883) {
-        out.push(f("PL-MQTT", "good-to-know", Some(d), "Smart-home messages are not encrypted".into(), format!("{n} runs an MQTT server without encryption."),
-            "Devices on your network could read or send smart-home commands through it if it has no password.", "Low: it needs someone on your network.",
-            &["In your smart-home hub's settings, make sure MQTT requires a username and password."]));
+        out.push(f("PL-MQTT", "good-to-know", Some(d),
+            tx!(l, "Smart-home messages are not encrypted", "Les messages de la maison connectée ne sont pas chiffrés", "رسائل المنزل الذكي غير مشفّرة"),
+            tx!(l, format!("{n} runs an MQTT server without encryption."), format!("{n} fait tourner un serveur MQTT sans chiffrement."), format!("{n} يشغّل خادم MQTT دون تشفير.")),
+            tx!(l, "Devices on your network could read or send smart-home commands through it if it has no password.", "Les appareils de votre réseau pourraient lire ou envoyer des commandes domotiques par lui s'il n'a pas de mot de passe.", "قد تقرأ أجهزة شبكتك أوامر المنزل الذكي أو ترسلها عبره إن لم تكن له كلمة مرور."),
+            tx!(l, "Low: it needs someone on your network.", "Faible : il faut quelqu'un sur votre réseau.", "منخفض: يتطلب شخصاً على شبكتك."),
+            vec![tx!(l, "In your smart-home hub's settings, make sure MQTT requires a username and password.", "Dans les réglages de votre box domotique, vérifiez que MQTT demande un nom d'utilisateur et un mot de passe.", "في إعدادات وحدة المنزل الذكي، تأكد أن MQTT يطلب اسم مستخدم وكلمة مرور.")]));
     }
     if !d.is_router && (d.kind == "camera" || d.kind == "Wi-Fi extender") && (has(80) || has(8080)) {
-        out.push(f("PL-DEFAULT-PASSWORD", "good-to-know", Some(d), format!("Make sure the {} has its own admin password", if d.kind == "camera" { "camera" } else { "Wi-Fi extender" }),
-            format!("{n} has a settings page at http://{}/.", d.ip),
-            "Porchlight never tries passwords, so it can't tell whether the factory password (often blank or \"admin\") is still set. Whoever knows it can change the device's settings.",
-            "Low, once you've set your own password.", &["Open its settings page in a browser.", "If it lets you in with no password or with \"admin\", set your own (12+ characters)."]));
+        let cam = d.kind == "camera";
+        out.push(f("PL-DEFAULT-PASSWORD", "good-to-know", Some(d),
+            if cam { tx!(l, "Make sure the camera has its own admin password", "Vérifiez que la caméra a son propre mot de passe administrateur", "تأكد أن للكاميرا كلمة مرور مسؤول خاصة بها") } else { tx!(l, "Make sure the Wi-Fi extender has its own admin password", "Vérifiez que le répéteur Wi-Fi a son propre mot de passe administrateur", "تأكد أن لمقوّي الواي فاي كلمة مرور مسؤول خاصة به") },
+            tx!(l, format!("{n} has a settings page at http://{}/.", d.ip), format!("{n} a une page de réglages à l'adresse http://{}/.", d.ip), format!("{n} له صفحة إعدادات على العنوان http://{}/.", d.ip)),
+            tx!(l, "Porchlight never tries passwords, so it can't tell whether the factory password (often blank or \"admin\") is still set. Whoever knows it can change the device's settings.", "Porchlight n'essaie jamais de mots de passe : il ne peut donc pas savoir si le mot de passe d'usine (souvent vide ou « admin ») est encore là. Qui le connaît peut modifier les réglages de l'appareil.", "لا يجرّب Porchlight كلمات المرور أبداً، لذا لا يعرف إن كانت كلمة مرور المصنع (غالباً فارغة أو \"admin\") لا تزال مستخدمة. من يعرفها يستطيع تغيير إعدادات الجهاز."),
+            tx!(l, "Low, once you've set your own password.", "Faible, une fois votre propre mot de passe choisi.", "منخفض، بعد أن تضع كلمة مرورك الخاصة."),
+            vec![tx!(l, "Open its settings page in a browser.", "Ouvrez sa page de réglages dans un navigateur.", "افتح صفحة إعداداته في المتصفح."),
+                 tx!(l, "If it lets you in with no password or with \"admin\", set your own (12+ characters).", "S'il vous laisse entrer sans mot de passe ou avec « admin », choisissez le vôtre (12 caractères ou plus).", "إن سمح لك بالدخول دون كلمة مرور أو بـ \"admin\"، ضع كلمة مرورك (12 حرفاً أو أكثر).")]));
     }
 }
 
-fn wifi_findings(v: &WifiView, real: &[AccessPoint], copies: &[AccessPoint], out: &mut Vec<Finding>) {
+fn wifi_findings(v: &WifiView, real: &[AccessPoint], copies: &[AccessPoint], out: &mut Vec<Finding>, l: Lang) {
     let Some(home) = &v.home_ssid else { return };
     for n in &v.yours {
         let p = n.protection.as_str();
+        let src = source_label(l, &n.source);
         if matches!(p, "Open" | "WEP" | "WPA" | "WPA2 (old TKIP)") {
             let (level, why) = match p {
-                "Open" => ("fix-soon", "Anyone nearby can join it and see what's on your network."),
-                "WEP" => ("fix-soon", "WEP can be cracked in minutes with free tools."),
-                _ => ("worth-fixing", "This protection is outdated; WPA2 (AES) or WPA3 is the safe choice."),
+                "Open" => ("fix-soon", tx!(l, "Anyone nearby can join it and see what's on your network.", "N'importe qui à proximité peut s'y connecter et voir ce qu'il y a sur votre réseau.", "يستطيع أي شخص قريب الانضمام إليها ورؤية ما على شبكتك.")),
+                "WEP" => ("fix-soon", tx!(l, "WEP can be cracked in minutes with free tools.", "Le WEP se casse en quelques minutes avec des outils gratuits.", "يمكن كسر WEP في دقائق بأدوات مجانية.")),
+                _ => ("worth-fixing", tx!(l, "This protection is outdated; WPA2 (AES) or WPA3 is the safe choice.", "Cette protection est dépassée ; WPA2 (AES) ou WPA3 est le choix sûr.", "هذه الحماية قديمة؛ والخيار الآمن هو WPA2 (AES) أو WPA3.")),
             };
-            out.push(f("PL-WIFI-WEAK", level, None, format!("Your Wi-Fi \"{}\" uses {}", n.ssid, if p == "Open" { "no password".to_string() } else { p.to_string() }), format!("\"{}\" ({}) is protected with {p}.", n.ssid, n.source), why,
-                "High for open or WEP networks: anyone within range can get in.", &["Open your router's settings page.", "Wi-Fi → Security: choose WPA2-Personal (AES) or WPA3 with a password of 12+ characters.", "Reconnect your devices."]));
+            let what = if p == "Open" { tx!(l, "no password", "aucun mot de passe", "بلا كلمة مرور") } else { p.to_string() };
+            out.push(f("PL-WIFI-WEAK", level, None,
+                tx!(l, format!("Your Wi-Fi \"{}\" uses {what}", n.ssid), format!("Votre Wi-Fi « {} » utilise : {what}", n.ssid), format!("شبكتك \"{}\" تستخدم: {what}", n.ssid)),
+                tx!(l, format!("\"{}\" ({src}) is protected with {p}.", n.ssid), format!("« {} » ({src}) est protégé par {p}.", n.ssid), format!("\"{}\" ({src}) محمية بـ {p}.", n.ssid)),
+                why,
+                tx!(l, "High for open or WEP networks: anyone within range can get in.", "Élevé pour les réseaux ouverts ou WEP : n'importe qui à portée peut entrer.", "مرتفع للشبكات المفتوحة أو WEP: يستطيع أي شخص في المدى الدخول."),
+                vec![tx!(l, "Open your router's settings page.", "Ouvrez la page de réglages de votre routeur.", "افتح صفحة إعدادات الراوتر."),
+                     tx!(l, "Wi-Fi → Security: choose WPA2-Personal (AES) or WPA3 with a password of 12+ characters.", "Wi-Fi → Sécurité : choisissez WPA2-Personnel (AES) ou WPA3 avec un mot de passe de 12 caractères ou plus.", "Wi-Fi ← الأمان: اختر WPA2-Personal (AES) أو WPA3 مع كلمة مرور من 12 حرفاً أو أكثر."),
+                     tx!(l, "Reconnect your devices.", "Reconnectez vos appareils.", "أعد توصيل أجهزتك.")]));
         }
         if n.wps {
-            out.push(f("PL-WPS", "worth-fixing", None, format!("WPS is on for \"{}\"", n.ssid), format!("\"{}\" ({}) announces WPS, the \"press a button or type an 8-digit PIN to connect\" feature.", n.ssid, n.source),
-                "The PIN part of WPS has a known design weakness: on some devices, someone within range can work out the PIN and get your Wi-Fi password, however long it is.",
-                "Low to moderate: it needs someone within range, and it only works on some models.", &["Open the settings page of the router or extender that broadcasts it.", "Find WPS (under Wireless or WLAN) and turn it off."]));
+            out.push(f("PL-WPS", "worth-fixing", None,
+                tx!(l, format!("WPS is on for \"{}\"", n.ssid), format!("Le WPS est activé sur « {} »", n.ssid), format!("خاصية WPS مفعّلة على \"{}\"", n.ssid)),
+                tx!(l, format!("\"{}\" ({src}) announces WPS, the \"press a button or type an 8-digit PIN to connect\" feature.", n.ssid), format!("« {} » ({src}) annonce le WPS, la fonction « appuyez sur un bouton ou tapez un code PIN à 8 chiffres pour vous connecter ».", n.ssid), format!("\"{}\" ({src}) تعلن عن WPS، خاصية \"اضغط زراً أو اكتب رمز PIN من 8 أرقام للاتصال\".", n.ssid)),
+                tx!(l, "The PIN part of WPS has a known design weakness: on some devices, someone within range can work out the PIN and get your Wi-Fi password, however long it is.", "La partie PIN du WPS a une faiblesse de conception connue : sur certains appareils, quelqu'un à portée peut deviner le code et obtenir votre mot de passe Wi-Fi, quelle que soit sa longueur.", "في جزء PIN من WPS ضعف تصميمي معروف: في بعض الأجهزة، يستطيع شخص قريب استنتاج الرمز والحصول على كلمة مرور شبكتك مهما كان طولها."),
+                tx!(l, "Low to moderate: it needs someone within range, and it only works on some models.", "Faible à modéré : il faut quelqu'un à portée, et cela ne marche que sur certains modèles.", "منخفض إلى متوسط: يتطلب شخصاً في المدى، ولا ينجح إلا في بعض الطرازات."),
+                vec![tx!(l, "Open the settings page of the router or extender that broadcasts it.", "Ouvrez la page de réglages du routeur ou du répéteur qui le diffuse.", "افتح صفحة إعدادات الراوتر أو المقوّي الذي يبثها."),
+                     tx!(l, "Find WPS (under Wireless or WLAN) and turn it off.", "Trouvez WPS (dans Sans fil ou WLAN) et désactivez-le.", "ابحث عن WPS (في قسم Wireless أو WLAN) وأوقفه.")]));
         }
     }
     if let Some(ap) = real.first() {
         if !ap.security.pmf_capable && wifi::strength(wifi::protection(&ap.security)) >= 3 {
-            out.push(f("PL-NO-PMF", "worth-fixing", None, format!("\"{home}\" doesn't protect against kick-off attacks"), format!("Your router doesn't use Protected Management Frames (802.11w) on \"{home}\"."),
-                "Without them, anyone within range can send fake \"disconnect\" messages that kick your devices off the Wi-Fi at will (a deauthentication attack). It's also the first step of many Wi-Fi attacks: kick a phone off, then catch it reconnecting.",
-                "Low to moderate: it needs someone within range with a Wi-Fi adapter, and the free tools for it are well known.",
-                &["Open your router's settings page → Wi-Fi security.", "Choose WPA2/WPA3 mixed or WPA3 if offered (WPA3 always protects management frames).", "Or look for \"PMF\", \"802.11w\" or \"Management Frame Protection\" and set it to Optional (Capable) or Required."]));
+            out.push(f("PL-NO-PMF", "worth-fixing", None,
+                tx!(l, format!("\"{home}\" doesn't protect against kick-off attacks"), format!("« {home} » ne protège pas contre les éjections"), format!("\"{home}\" لا تحمي من هجمات الطرد")),
+                tx!(l, format!("Your router doesn't use Protected Management Frames (802.11w) on \"{home}\"."), format!("Votre routeur n'utilise pas les trames de gestion protégées (802.11w) sur « {home} »."), format!("لا يستخدم الراوتر إطارات الإدارة المحمية (802.11w) على \"{home}\".")),
+                tx!(l, "Without them, anyone within range can send fake \"disconnect\" messages that kick your devices off the Wi-Fi at will (a deauthentication attack). It's also the first step of many Wi-Fi attacks: kick a phone off, then catch it reconnecting.", "Sans elles, n'importe qui à portée peut envoyer de faux messages « déconnexion » qui éjectent vos appareils du Wi-Fi à volonté (une attaque par désauthentification). C'est aussi la première étape de nombreuses attaques Wi-Fi : éjecter un téléphone, puis l'attraper quand il se reconnecte.", "دونها يستطيع أي شخص قريب إرسال رسائل \"قطع اتصال\" مزيفة تطرد أجهزتك من الشبكة متى شاء (هجوم إلغاء المصادقة). وهي أيضاً الخطوة الأولى في كثير من هجمات الواي فاي: طرد الهاتف ثم التقاطه أثناء إعادة الاتصال."),
+                tx!(l, "Low to moderate: it needs someone within range with a Wi-Fi adapter, and the free tools for it are well known.", "Faible à modéré : il faut quelqu'un à portée avec un adaptateur Wi-Fi, et les outils gratuits pour cela sont bien connus.", "منخفض إلى متوسط: يتطلب شخصاً قريباً معه محوّل واي فاي، والأدوات المجانية لذلك معروفة."),
+                vec![tx!(l, "Open your router's settings page → Wi-Fi security.", "Ouvrez la page de réglages de votre routeur → Sécurité Wi-Fi.", "افتح صفحة إعدادات الراوتر ← أمان الواي فاي."),
+                     tx!(l, "Choose WPA2/WPA3 mixed or WPA3 if offered (WPA3 always protects management frames).", "Choisissez WPA2/WPA3 mixte ou WPA3 si proposé (WPA3 protège toujours les trames de gestion).", "اختر WPA2/WPA3 المختلط أو WPA3 إن توفر (WPA3 يحمي إطارات الإدارة دائماً)."),
+                     tx!(l, "Or look for \"PMF\", \"802.11w\" or \"Management Frame Protection\" and set it to Optional (Capable) or Required.", "Ou cherchez « PMF », « 802.11w » ou « Management Frame Protection » et réglez-le sur Optionnel (Capable) ou Obligatoire.", "أو ابحث عن \"PMF\" أو \"802.11w\" أو \"Management Frame Protection\" واضبطه على اختياري (Capable) أو إلزامي (Required).")]));
         }
     }
     for c in copies {
         let weaker = wifi::strength(wifi::protection(&c.security)) < real.iter().map(|a| wifi::strength(wifi::protection(&a.security))).max().unwrap_or(-1);
+        let prot = wifi::protection(&c.security);
         out.push(f(if weaker { "PL-EVIL-TWIN" } else { "PL-SSID-DUPLICATE" }, if weaker { "worth-fixing" } else { "good-to-know" }, None,
-            if weaker { "A network with weaker protection is using your Wi-Fi's name".to_string() } else { "Another access point uses your Wi-Fi's name".into() },
-            format!("An access point that isn't yours broadcasts \"{}\" ({}).", c.ssid, wifi::protection(&c.security)),
-            "Phones join networks by name. A copy can trick a device into joining it, and whoever runs it could see that device's unencrypted traffic.",
-            "Low to moderate: it could also be a neighbour with the same default name.",
-            &["Don't connect to it.", "Give your Wi-Fi a unique name so copies stand out.", "Porchlight will tell you if it keeps appearing."]));
+            if weaker { tx!(l, "A network with weaker protection is using your Wi-Fi's name", "Un réseau moins protégé utilise le nom de votre Wi-Fi", "شبكة بحماية أضعف تستخدم اسم شبكتك") } else { tx!(l, "Another access point uses your Wi-Fi's name", "Un autre point d'accès utilise le nom de votre Wi-Fi", "نقطة وصول أخرى تستخدم اسم شبكتك") },
+            tx!(l, format!("An access point that isn't yours broadcasts \"{}\" ({prot}).", c.ssid), format!("Un point d'accès qui n'est pas le vôtre diffuse « {} » ({prot}).", c.ssid), format!("نقطة وصول ليست لك تبث \"{}\" ({prot}).", c.ssid)),
+            tx!(l, "Phones join networks by name. A copy can trick a device into joining it, and whoever runs it could see that device's unencrypted traffic.", "Les téléphones rejoignent les réseaux par leur nom. Une copie peut piéger un appareil pour qu'il s'y connecte, et celui qui la gère pourrait voir son trafic non chiffré.", "تنضم الهواتف إلى الشبكات بحسب الاسم. قد تخدع النسخة جهازاً فينضم إليها، ويستطيع من يديرها رؤية بياناته غير المشفّرة."),
+            tx!(l, "Low to moderate: it could also be a neighbour with the same default name.", "Faible à modéré : cela peut aussi être un voisin avec le même nom par défaut.", "منخفض إلى متوسط: قد يكون أيضاً جاراً بالاسم الافتراضي نفسه."),
+            vec![tx!(l, "Don't connect to it.", "Ne vous y connectez pas.", "لا تتصل بها."),
+                 tx!(l, "Give your Wi-Fi a unique name so copies stand out.", "Donnez à votre Wi-Fi un nom unique pour que les copies se remarquent.", "أعطِ شبكتك اسماً فريداً حتى تظهر النسخ بوضوح."),
+                 tx!(l, "Porchlight will tell you if it keeps appearing.", "Porchlight vous dira si elle continue d'apparaître.", "سيخبرك Porchlight إن استمر ظهورها.")]));
     }
     if !v.saved_open_auto.is_empty() {
+        let count = v.saved_open_auto.len();
         let list = v.saved_open_auto.iter().map(|s| format!("\"{}\"", s.ssid)).collect::<Vec<_>>().join(", ");
-        out.push(f("PL-SAVED-OPEN", "worth-fixing", None, format!("This computer joins {} open Wi-Fi network{} by itself", v.saved_open_auto.len(), if v.saved_open_auto.len() == 1 { "" } else { "s" }),
-            format!("Saved and set to connect automatically: {list}."),
-            "Anyone can create a fake hotspot with one of these names, and this computer will join it without asking, because open networks can't prove who they are. That's how \"MANA\" and \"KARMA\" attacks work.",
-            "Moderate when you're away from home (cafés, airports, school), where these attacks are set up.",
-            &["Settings → Network & internet → Wi-Fi → Manage known networks.", "Forget the open networks above, or open each one and turn off \"Connect automatically\"."]));
+        out.push(f("PL-SAVED-OPEN", "worth-fixing", None,
+            tx!(l, format!("This computer joins {count} open Wi-Fi network{} by itself", if count == 1 { "" } else { "s" }), format!("Cet ordinateur rejoint tout seul {count} réseau{} Wi-Fi ouvert{}", if count == 1 { "" } else { "x" }, if count == 1 { "" } else { "s" }), format!("ينضم هذا الحاسوب تلقائياً إلى {count} من شبكات الواي فاي المفتوحة")),
+            tx!(l, format!("Saved and set to connect automatically: {list}."), format!("Enregistrés et configurés pour se connecter automatiquement : {list}."), format!("محفوظة ومضبوطة للاتصال تلقائياً: {list}.")),
+            tx!(l, "Anyone can create a fake hotspot with one of these names, and this computer will join it without asking, because open networks can't prove who they are. That's how \"MANA\" and \"KARMA\" attacks work.", "N'importe qui peut créer un faux point d'accès avec l'un de ces noms, et cet ordinateur s'y connectera sans demander, car les réseaux ouverts ne peuvent pas prouver leur identité. C'est ainsi que fonctionnent les attaques « MANA » et « KARMA ».", "يستطيع أي شخص إنشاء نقطة اتصال مزيفة بأحد هذه الأسماء، وسينضم إليها هذا الحاسوب دون سؤال، لأن الشبكات المفتوحة لا تستطيع إثبات هويتها. هكذا تعمل هجمات \"MANA\" و\"KARMA\"."),
+            tx!(l, "Moderate when you're away from home (cafés, airports, school), where these attacks are set up.", "Modéré quand vous êtes hors de chez vous (cafés, aéroports, école), là où ces attaques sont mises en place.", "متوسط عندما تكون خارج المنزل (المقاهي، المطارات، المدرسة)، حيث تُنصب هذه الهجمات."),
+            vec![tx!(l, "Settings → Network & internet → Wi-Fi → Manage known networks.", "Paramètres → Réseau et Internet → Wi-Fi → Gérer les réseaux connus.", "الإعدادات ← الشبكة والإنترنت ← Wi-Fi ← إدارة الشبكات المعروفة."),
+                 tx!(l, "Forget the open networks above, or open each one and turn off \"Connect automatically\".", "Oubliez les réseaux ouverts ci-dessus, ou ouvrez chacun et désactivez « Se connecter automatiquement ».", "انسَ الشبكات المفتوحة أعلاه، أو افتح كلاً منها وأوقف \"الاتصال تلقائياً\".")]));
     }
     if !v.saved_hidden.is_empty() {
         let list = v.saved_hidden.iter().map(|s| format!("\"{}\"", s.ssid)).collect::<Vec<_>>().join(", ");
-        out.push(f("PL-SAVED-HIDDEN", "good-to-know", None, "This computer calls out for hidden networks".into(), format!("Saved as hidden networks: {list}."),
-            "To find a hidden network, this computer keeps calling its name everywhere it goes, which tells anyone listening which networks to fake.", "Low.",
-            &["If you don't need them, forget these networks in Settings → Wi-Fi → Manage known networks."]));
+        out.push(f("PL-SAVED-HIDDEN", "good-to-know", None,
+            tx!(l, "This computer calls out for hidden networks", "Cet ordinateur appelle des réseaux masqués", "هذا الحاسوب ينادي على شبكات مخفية"),
+            tx!(l, format!("Saved as hidden networks: {list}."), format!("Enregistrés comme réseaux masqués : {list}."), format!("محفوظة كشبكات مخفية: {list}.")),
+            tx!(l, "To find a hidden network, this computer keeps calling its name everywhere it goes, which tells anyone listening which networks to fake.", "Pour trouver un réseau masqué, cet ordinateur appelle son nom partout où il va, ce qui indique à quiconque écoute quels réseaux imiter.", "لإيجاد شبكة مخفية، يظل هذا الحاسوب ينادي اسمها أينما ذهب، مما يخبر أي مستمع بالشبكات التي يمكنه تزييفها."),
+            tx!(l, "Low.", "Faible.", "منخفض."),
+            vec![tx!(l, "If you don't need them, forget these networks in Settings → Wi-Fi → Manage known networks.", "Si vous n'en avez pas besoin, oubliez ces réseaux dans Paramètres → Wi-Fi → Gérer les réseaux connus.", "إن لم تكن بحاجة إليها، انسَ هذه الشبكات من الإعدادات ← Wi-Fi ← إدارة الشبكات المعروفة.")]));
     }
 }
 
@@ -574,8 +699,11 @@ fn watch_router(state: &mut State, found: &[(Ipv4Addr, [u8; 6])], gateway: Ipv4A
     if !fakes.is_empty() {
         crate::log_warn!("devices answering with the router's MAC: {}", fakes.join(", "));
         if state.first_time(format!("spoof:{gm}:{}", fakes.join(","))) {
-            alerts.push(state.alert("urgent", "Another device is answering as your router".into(),
-                format!("The device at {} uses the same hardware address as your router. That's how a \"man-in-the-middle\" attack starts: traffic meant for the router goes through that device first. Unplug or switch off devices you don't recognise, then restart your router.", fakes.join(", ")), None));
+            let (l, at) = (state.lang(), fakes.join(", "));
+            alerts.push(state.alert("urgent", tx!(l, "Another device is answering as your router", "Un autre appareil répond à la place de votre routeur", "جهاز آخر يردّ على أنه الراوتر"),
+                tx!(l, format!("The device at {at} uses the same hardware address as your router. That's how a \"man-in-the-middle\" attack starts: traffic meant for the router goes through that device first. Unplug or switch off devices you don't recognise, then restart your router."),
+                    format!("L'appareil à l'adresse {at} utilise la même adresse matérielle que votre routeur. C'est ainsi que commence une attaque « de l'homme du milieu » : le trafic destiné au routeur passe d'abord par cet appareil. Débranchez ou éteignez les appareils que vous ne reconnaissez pas, puis redémarrez votre routeur."),
+                    format!("الجهاز على العنوان {at} يستخدم العنوان المادي نفسه للراوتر. هكذا يبدأ هجوم \"الرجل في المنتصف\": البيانات الموجهة إلى الراوتر تمر عبر ذلك الجهاز أولاً. افصل أو أطفئ الأجهزة التي لا تعرفها، ثم أعد تشغيل الراوتر.")), None));
         }
     }
     match state.home.as_ref().and_then(|h| h.router_mac.clone()) {
@@ -587,8 +715,11 @@ fn watch_router(state: &mut State, found: &[(Ipv4Addr, [u8; 6])], gateway: Ipv4A
         Some(old) if old != gm => {
             crate::log_warn!("router identity changed");
             if state.first_time(format!("router-changed:{gm}")) {
-                alerts.push(state.alert("urgent", "Your router's identity changed".into(),
-                    format!("Your router used to have the hardware address {old}; now something at the router's address answers with {gm}. If you didn't replace your router, another device may be pretending to be it. If you did, open Porchlight and tap \"I replaced my router\"."), None));
+                let l = state.lang();
+                alerts.push(state.alert("urgent", tx!(l, "Your router's identity changed", "L'identité de votre routeur a changé", "تغيّرت هوية الراوتر"),
+                    tx!(l, format!("Your router used to have the hardware address {old}; now something at the router's address answers with {gm}. If you didn't replace your router, another device may be pretending to be it. If you did, open Porchlight and tap \"I replaced my router\"."),
+                        format!("Votre routeur avait l'adresse matérielle {old} ; maintenant, quelque chose répond à l'adresse du routeur avec {gm}. Si vous n'avez pas changé de routeur, un autre appareil se fait peut-être passer pour lui. Si vous l'avez changé, ouvrez Porchlight et appuyez sur « J'ai remplacé mon routeur »."),
+                        format!("كان للراوتر العنوان المادي {old}؛ والآن يردّ شيء على عنوان الراوتر بالعنوان {gm}. إن لم تستبدل الراوتر، فقد يكون جهاز آخر ينتحل صفته. وإن استبدلته، افتح Porchlight واضغط \"استبدلت الراوتر\".")), None));
             }
         }
         _ => {}
@@ -697,27 +828,38 @@ fn new_device_alerts(state: &mut State, fresh: &[String], alerts: &mut Vec<Alert
         if is_this_pc(&d) {
             continue;
         }
-        let doors = d.deep.as_ref().filter(|x| !x.ports.is_empty()).map(|x| format!(" Open doors: {}.", x.ports.iter().map(|p| checks::port_name(*p)).collect::<Vec<_>>().join(", "))).unwrap_or_default();
-        let who = if d.name.eq_ignore_ascii_case(&d.kind) { format!("A {} ({})", d.kind, d.ip) } else { format!("{} ({}, {})", d.name, d.kind, d.ip) };
-        alerts.push(state.alert("warning", format!("New device: {}", d.name), format!("{who} joined your network.{doors} If you don't recognise it, change your Wi-Fi password."), Some(k.clone())));
+        let l = state.lang();
+        let ports = d.deep.as_ref().filter(|x| !x.ports.is_empty()).map(|x| x.ports.iter().map(|p| checks::port_name(*p)).collect::<Vec<_>>().join(", "));
+        let doors = ports.map(|p| tx!(l, format!(" Open doors: {p}."), format!(" Portes ouvertes : {p}."), format!(" المنافذ المفتوحة: {p}."))).unwrap_or_default();
+        let kind = kind_label(&d.kind, l);
+        let who = if d.name.eq_ignore_ascii_case(&d.kind) || d.name.to_lowercase() == kind.to_lowercase() { tx!(l, format!("A {kind} ({})", d.ip), format!("Un appareil « {kind} » ({})", d.ip), format!("جهاز \"{kind}\" ({})", d.ip)) } else { format!("{} ({kind}, {})", d.name, d.ip) };
+        alerts.push(state.alert("warning", tx!(l, format!("New device: {}", d.name), format!("Nouvel appareil : {}", d.name), format!("جهاز جديد: {}", d.name)),
+            tx!(l, format!("{who} joined your network.{doors} If you don't recognise it, open Porchlight and choose \"I don't know it\": it shows how to remove it."),
+                format!("{who} a rejoint votre réseau.{doors} Si vous ne le reconnaissez pas, ouvrez Porchlight et choisissez « Je ne le connais pas » : il vous montre comment le retirer."),
+                format!("{who} انضم إلى شبكتك.{doors} إن لم تعرفه، افتح Porchlight واختر \"لا أعرفه\": سيريك كيف تزيله.")), Some(k.clone())));
     }
 }
 
 fn mapping_findings(state: &State, out: &mut Vec<Finding>) {
+    let l = state.lang();
     // A mapping to any of this computer's addresses (a second adapter, a virtual network) belongs to this computer.
     let mine: Vec<String> = if state.mappings.is_empty() { Vec::new() } else { net::local_addresses().iter().map(|ip| ip.to_string()).collect() };
     for m in &state.mappings {
         let name = if mine.contains(&m.internal_client) {
-            format!("This computer ({})", m.internal_client)
+            format!("{} ({})", tx!(l, "This computer", "Cet ordinateur", "هذا الحاسوب"), m.internal_client)
         } else {
             state.devices.values().find(|d| d.ip == m.internal_client).map(|d| d.name.clone()).unwrap_or_else(|| m.internal_client.clone())
         };
         let sensitive = [21, 23, 80, 554, 8000, 8080, 8554, 34567, 37777, 3389, 5900].contains(&m.internal_port);
-        out.push(Finding { id: "PL-UPNP-MAPPING".into(), level: if sensitive { "fix-soon" } else { "worth-fixing" }.into(), title: "A device opened a door to the internet by itself".into(),
-            found: format!("{name} asked your router to open port {} ({}) to the internet{}.", m.external_port, m.protocol, if m.description.is_empty() { String::new() } else { format!(", labelled \"{}\"", m.description) }),
-            means: "Anyone on the internet can now reach that device through this port, not just people in your home.".into(),
-            likely: if sensitive { "High: internet-wide scanners look for exactly these services." } else { "Low to moderate, depending on what's listening." }.into(),
-            fix: vec!["If you don't recognise it: in your router's settings, turn off UPnP, then restart the device.".into()], device: None });
+        out.push(Finding { id: "PL-UPNP-MAPPING".into(), level: if sensitive { "fix-soon" } else { "worth-fixing" }.into(), title: tx!(l, "A device opened a door to the internet by itself", "Un appareil a ouvert tout seul une porte sur Internet", "جهاز فتح باباً على الإنترنت من تلقاء نفسه"),
+            found: {
+                let (port, proto) = (m.external_port, &m.protocol);
+                let label = if m.description.is_empty() { String::new() } else { tx!(l, format!(", labelled \"{}\"", m.description), format!(", nommé « {} »", m.description), format!("، باسم \"{}\"", m.description)) };
+                tx!(l, format!("{name} asked your router to open port {port} ({proto}) to the internet{label}."), format!("{name} a demandé à votre routeur d'ouvrir le port {port} ({proto}) sur Internet{label}."), format!("طلب {name} من الراوتر فتح المنفذ {port} ({proto}) على الإنترنت{label}."))
+            },
+            means: tx!(l, "Anyone on the internet can now reach that device through this port, not just people in your home.", "N'importe qui sur Internet peut maintenant atteindre cet appareil par ce port, pas seulement les gens de chez vous.", "يستطيع أي شخص على الإنترنت الآن الوصول إلى ذلك الجهاز عبر هذا المنفذ، وليس فقط من في منزلك."),
+            likely: if sensitive { tx!(l, "High: internet-wide scanners look for exactly these services.", "Élevé : des scanners parcourent Internet à la recherche de ces services.", "مرتفع: ماسحات تجوب الإنترنت بحثاً عن هذه الخدمات تحديداً.") } else { tx!(l, "Low to moderate, depending on what's listening.", "Faible à modéré, selon ce qui écoute derrière.", "منخفض إلى متوسط، حسب ما يعمل خلفه.") },
+            fix: vec![tx!(l, "If you don't recognise it: in your router's settings, turn off UPnP, then restart the device.", "Si vous ne le reconnaissez pas : dans les réglages du routeur, désactivez UPnP, puis redémarrez l'appareil.", "إن لم تعرفه: من إعدادات الراوتر أوقف UPnP، ثم أعد تشغيل الجهاز.")], device: None });
     }
 }
 
@@ -737,10 +879,11 @@ fn finding_key(f: &Finding) -> String {
 /// Every finding, recomputed from what is known now, most urgent first.
 fn all_findings(state: &State, real: &[AccessPoint], copies: &[AccessPoint], extra: Vec<Finding>) -> Vec<Finding> {
     let mut out = Vec::new();
+    let l = state.lang();
     for d in state.devices.values().filter(|d| d.online || d.is_router) {
-        device_findings(d, &state.mappings, &mut out);
+        device_findings(d, &state.mappings, &mut out, l);
     }
-    wifi_findings(&state.wifi, real, copies, &mut out);
+    wifi_findings(&state.wifi, real, copies, &mut out, l);
     mapping_findings(state, &mut out);
     out.extend(extra);
     out.sort_by_key(|f| level_order(&f.level));
@@ -756,7 +899,8 @@ fn risk_alerts(state: &mut State, previous: &HashSet<String>, findings: &[Findin
     for f in findings.iter().filter(|f| level_order(&f.level) <= 1 && f.id != "PL-EVIL-TWIN" && !accepted.contains(&finding_key(f))) {
         let key = finding_key(f);
         if !previous.contains(&key) && state.first_time(format!("finding:{key}")) {
-            alerts.push(state.alert(if f.level == "fix-soon" { "urgent" } else { "warning" }, format!("New risk: {}", f.title), f.found.clone(), f.device.clone()));
+            let title = tx!(state.lang(), format!("New risk: {}", f.title), format!("Nouveau risque : {}", f.title), format!("خطر جديد: {}", f.title));
+            alerts.push(state.alert(if f.level == "fix-soon" { "urgent" } else { "warning" }, title, f.found.clone(), f.device.clone()));
         }
     }
 }
@@ -766,7 +910,11 @@ fn copy_alerts(state: &mut State, real: &[AccessPoint], copies: &[AccessPoint], 
         // Recorded during the first look too, so a neighbour's long-standing copy doesn't alert later.
         if state.first_time(format!("copy:{}", c.bssid)) && state.baseline_done {
             crate::log_warn!("weaker copy of the home Wi-Fi name seen ({})", wifi::protection(&c.security));
-            alerts.push(state.alert("urgent", format!("A fake copy of \"{}\" appeared", c.ssid), format!("An access point nearby broadcasts your Wi-Fi's name with {} protection. Don't connect to it; your devices should stay on your real network.", wifi::protection(&c.security)), None));
+            let (l, ssid, prot) = (state.lang(), &c.ssid, wifi::protection(&c.security));
+            alerts.push(state.alert("urgent", tx!(l, format!("A fake copy of \"{ssid}\" appeared"), format!("Une fausse copie de « {ssid} » est apparue"), format!("ظهرت نسخة مزيفة من \"{ssid}\"")),
+                tx!(l, format!("An access point nearby broadcasts your Wi-Fi's name with {prot} protection. Don't connect to it; your devices should stay on your real network."),
+                    format!("Un point d'accès proche diffuse le nom de votre Wi-Fi avec une protection {prot}. Ne vous y connectez pas ; vos appareils doivent rester sur votre vrai réseau."),
+                    format!("نقطة وصول قريبة تبث اسم شبكتك بحماية {prot}. لا تتصل بها؛ يجب أن تبقى أجهزتك على شبكتك الحقيقية.")), None));
         }
     }
 }
@@ -782,13 +930,17 @@ fn set_baseline(state: &mut State, t: u64, alerts: &mut Vec<Alert>) {
         }
     }
     let n = state.devices.values().filter(|d| d.online).count();
-    alerts.push(state.alert("info", "Porchlight is watching your home".into(), format!("{n} devices are on your network. You'll get a notification if a new one joins, if something pretends to be your router, or if a new risk appears."), None));
+    let l = state.lang();
+    alerts.push(state.alert("info", tx!(l, "Porchlight is watching your home", "Porchlight veille sur votre maison", "Porchlight يراقب منزلك"),
+        tx!(l, format!("{n} devices are on your network. You'll get a notification if a new one joins, if something pretends to be your router, or if a new risk appears."),
+            format!("{n} appareils sont sur votre réseau. Vous serez prévenu si un nouveau arrive, si quelque chose se fait passer pour votre routeur, ou si un nouveau risque apparaît."),
+            format!("على شبكتك {n} من الأجهزة. سيصلك إشعار إن انضم جهاز جديد، أو انتحل شيء صفة الراوتر، أو ظهر خطر جديد.")), None));
 }
 
 /// Looks at the home network: who's there, who's new, whether the router is still the router, and every device's
 /// doors (all of them on a full check, newcomers otherwise). Returns findings about this computer's own settings.
 fn look_at_home(state: &mut State, netw: &Network, survey: &Survey, full: bool, t: u64, progress: &dyn Fn(&str), alerts: &mut Vec<Alert>) -> Vec<Finding> {
-    progress("Looking for devices");
+    progress(&tx!(state.lang(), "Looking for devices", "Recherche des appareils", "البحث عن الأجهزة"));
     let swept = std::time::Instant::now();
     // Other addresses of this computer (a second adapter, a virtual machine's network) are not visitors.
     let mine = net::local_addresses();
@@ -797,7 +949,7 @@ fn look_at_home(state: &mut State, netw: &Network, survey: &Survey, full: bool, 
     crate::log_info!("sweep: {} answers, {} UPnP devices in {:.1}s", found.len(), upnp.len(), swept.elapsed().as_secs_f32());
     watch_router(state, &found, netw.gateway, alerts);
     let fresh = merge_devices(state, &found, netw, t);
-    progress("Naming devices");
+    progress(&tx!(state.lang(), "Naming devices", "Identification des appareils", "تسمية الأجهزة"));
     name_devices(state, &upnp, survey, netw.gateway);
     let doors: Vec<String> = if full { state.devices.keys().cloned().collect() } else { fresh.clone() };
     knock_doors(state, &doors, t, progress);
@@ -805,13 +957,14 @@ fn look_at_home(state: &mut State, netw: &Network, survey: &Survey, full: bool, 
         state.last_full = t;
     }
     read_upnp(state, &upnp, netw.gateway);
+    let lang = state.lang();
     for d in state.devices.values_mut() {
         d.kind = kind_of(d);
-        d.name = name_of(d);
+        d.name = name_of(d, lang);
     }
     disambiguate(&mut state.devices);
     new_device_alerts(state, &fresh, alerts);
-    progress("Checking this computer's DNS and IPv6");
+    progress(&tx!(state.lang(), "Checking this computer's DNS and IPv6", "Vérification du DNS et de l'IPv6 de cet ordinateur", "فحص DNS وIPv6 لهذا الحاسوب"));
     let mut me = crate::system::look(full);
     match me.invents {
         Some(v) => state.dns_invents = Some(v),
@@ -819,7 +972,7 @@ fn look_at_home(state: &mut State, netw: &Network, survey: &Survey, full: bool, 
     }
     let dns: Vec<String> = me.dns.iter().map(|d| d.to_string()).collect();
     watch_dns(state, &dns, alerts);
-    crate::system::findings(&me, netw, &state.devices)
+    crate::system::findings(&me, netw, &state.devices, state.lang())
 }
 
 // ---------- kick-off (deauthentication) attacks, from live Wi-Fi events ----------
@@ -872,14 +1025,18 @@ pub fn kicked_off(state: &mut State, ssid: &str, bounces: usize, quality: u32) -
         return None;
     }
     let unprotected = state.findings.iter().any(|f| f.id == "PL-NO-PMF");
+    let l = state.lang();
     let why = if unprotected {
-        " Your router doesn't use Protected Management Frames, which is what stops this (see Wi-Fi in Porchlight)."
+        tx!(l, " Your router doesn't use Protected Management Frames, which is what stops this (see Wi-Fi in Porchlight).", " Votre routeur n'utilise pas les trames de gestion protégées, qui empêchent cela (voir Wi-Fi dans Porchlight).", " لا يستخدم الراوتر إطارات الإدارة المحمية التي تمنع هذا (راجع Wi-Fi في Porchlight).")
     } else {
-        " Your router protects against fake disconnect messages, so this may also be interference or a router problem."
+        tx!(l, " Your router protects against fake disconnect messages, so this may also be interference or a router problem.", " Votre routeur se protège contre les faux messages de déconnexion : il peut donc aussi s'agir d'interférences ou d'un problème de routeur.", " الراوتر يحمي من رسائل قطع الاتصال المزيفة، لذا قد يكون السبب أيضاً تداخلاً أو مشكلة في الراوتر.")
     };
+    let mins = BOUNCE_WINDOW / 60;
     crate::log_warn!("kick-off pattern: {bounces} drops and reconnects in {} minutes", BOUNCE_WINDOW / 60);
-    Some(state.alert("urgent", format!("Something keeps kicking this computer off \"{ssid}\""),
-        format!("This computer dropped off the Wi-Fi and reconnected {bounces} times in the last {} minutes, with a good signal. That's the pattern of a \"kick-off\" (deauthentication) attack, often used to push devices onto a fake copy of a network.{why} Porchlight is checking for copies of your Wi-Fi now.", BOUNCE_WINDOW / 60), None))
+    Some(state.alert("urgent", tx!(l, format!("Something keeps kicking this computer off \"{ssid}\""), format!("Quelque chose éjecte sans cesse cet ordinateur de « {ssid} »"), format!("شيء ما يطرد هذا الحاسوب باستمرار من \"{ssid}\"")),
+        tx!(l, format!("This computer dropped off the Wi-Fi and reconnected {bounces} times in the last {mins} minutes, with a good signal. That's the pattern of a \"kick-off\" (deauthentication) attack, often used to push devices onto a fake copy of a network.{why} Porchlight is checking for copies of your Wi-Fi now."),
+            format!("Cet ordinateur a perdu le Wi-Fi et s'est reconnecté {bounces} fois en {mins} minutes, avec un bon signal. C'est le schéma d'une attaque par éjection (désauthentification), souvent utilisée pour pousser les appareils vers une fausse copie d'un réseau.{why} Porchlight cherche maintenant des copies de votre Wi-Fi."),
+            format!("انقطع هذا الحاسوب عن الواي فاي وعاد للاتصال {bounces} مرات خلال آخر {mins} دقيقة، مع إشارة جيدة. هذا نمط هجوم \"الطرد\" (إلغاء المصادقة)، ويُستخدم غالباً لدفع الأجهزة إلى نسخة مزيفة من الشبكة.{why} يبحث Porchlight الآن عن نسخ من شبكتك.")), None))
 }
 
 // ---------- DNS: the address book every website visit starts with ----------
@@ -907,8 +1064,11 @@ fn watch_dns(state: &mut State, servers: &[String], alerts: &mut Vec<Alert>) {
     home.dns = servers.to_vec();
     crate::log_warn!("DNS servers changed: {old} -> {new}");
     if state.baseline_done && state.first_time(format!("dns:{new}")) {
-        alerts.push(state.alert("warning", "Your DNS servers changed".into(),
-            format!("This computer used to look up websites through {old}; now it uses {new}. If you or a VPN or ad-blocking app didn't change this, someone may have changed your router's settings to send you to fake websites. Open your router's settings, check the DNS servers, and change the router's admin password."), None));
+        let l = state.lang();
+        alerts.push(state.alert("warning", tx!(l, "Your DNS servers changed", "Vos serveurs DNS ont changé", "تغيّرت خوادم DNS لديك"),
+            tx!(l, format!("This computer used to look up websites through {old}; now it uses {new}. If you or a VPN or ad-blocking app didn't change this, someone may have changed your router's settings to send you to fake websites. Open your router's settings, check the DNS servers, and change the router's admin password."),
+                format!("Cet ordinateur trouvait les sites web via {old} ; il utilise maintenant {new}. Si ni vous, ni un VPN, ni un bloqueur de publicités n'avez fait ce changement, quelqu'un a peut-être modifié les réglages de votre routeur pour vous envoyer vers de faux sites. Ouvrez les réglages du routeur, vérifiez les serveurs DNS et changez le mot de passe administrateur du routeur."),
+                format!("كان هذا الحاسوب يبحث عن المواقع عبر {old}؛ والآن يستخدم {new}. إن لم تغيّر ذلك أنت أو تطبيق VPN أو مانع إعلانات، فربما غيّر أحدهم إعدادات الراوتر ليوجهك إلى مواقع مزيفة. افتح إعدادات الراوتر، وتحقق من خوادم DNS، وغيّر كلمة مرور مسؤول الراوتر.")), None));
     }
 }
 
@@ -954,10 +1114,10 @@ pub fn check(state: &mut State, full: bool, progress: &dyn Fn(&str)) -> Vec<Aler
     let started = std::time::Instant::now();
     let mut alerts = Vec::new();
     let t = now();
-    progress("Finding your network");
+    progress(&tx!(state.lang(), "Finding your network", "Recherche de votre réseau", "البحث عن شبكتك"));
     let Some(netw) = net::find_network() else {
         crate::log_warn!("no default route: not connected");
-        state.status = "Not connected to a network".into();
+        state.status = tx!(state.lang(), "Not connected to a network", "Pas connecté à un réseau", "غير متصل بأي شبكة");
         state.on_home = false;
         state.last_check = t;
         return alerts;
@@ -969,7 +1129,7 @@ pub fn check(state: &mut State, full: bool, progress: &dyn Fn(&str)) -> Vec<Aler
     state.on_home = home.cidr == netw.cidr && home.gateway == netw.gateway.to_string();
     state.network = Some(netw.clone());
 
-    progress("Listening to your Wi-Fi");
+    progress(&tx!(state.lang(), "Listening to your Wi-Fi", "Écoute de votre Wi-Fi", "الاستماع إلى شبكتك"));
     let survey = wifi::survey(true);
     let extra = if state.on_home { look_at_home(state, &netw, &survey, full, t, progress, &mut alerts) } else { Vec::new() };
 
@@ -983,7 +1143,8 @@ pub fn check(state: &mut State, full: bool, progress: &dyn Fn(&str)) -> Vec<Aler
     state.findings = findings;
     state.last_check = t;
     let online = state.devices.values().filter(|d| d.online).count();
-    state.status = if state.on_home { format!("Watching {online} devices") } else { "You're on a different network; Porchlight watches your home network".into() };
+    let l = state.lang();
+    state.status = if state.on_home { tx!(l, format!("Watching {online} devices"), format!("{online} appareils sous surveillance"), format!("مراقبة {online} من الأجهزة")) } else { tx!(l, "You're on a different network; Porchlight watches your home network", "Vous êtes sur un autre réseau ; Porchlight surveille votre réseau domestique", "أنت على شبكة أخرى؛ Porchlight يراقب شبكة منزلك") };
     if !state.baseline_done && state.on_home {
         set_baseline(state, t, &mut alerts);
     }
@@ -1085,7 +1246,7 @@ mod tests {
     #[test]
     fn a_name_announced_by_a_service_beats_a_host_name() {
         let d = Device { kind: "phone or tablet".into(), router_name: Some("iPhone".into()), service_name: Some("Sara's iPhone".into()), ..Default::default() };
-        assert_eq!(name_of(&d), "Sara's iPhone");
+        assert_eq!(name_of(&d, Lang::En), "Sara's iPhone");
     }
 
     // ---------- diagnostics ----------
@@ -1339,7 +1500,7 @@ mod tests {
         let real = vec![ap("Home", "40:00:00:00:00:01", wpa2())];
         let v = WifiView { home_ssid: Some("Home".into()), ..Default::default() };
         let mut out = Vec::new();
-        wifi_findings(&v, &real, &[], &mut out);
+        wifi_findings(&v, &real, &[], &mut out, Lang::En);
         assert!(out.iter().any(|f| f.id == "PL-NO-PMF"));
     }
 
@@ -1348,7 +1509,7 @@ mod tests {
         let real = vec![ap("Home", "40:00:00:00:00:01", Security { pmf_capable: true, ..wpa2() })];
         let v = WifiView { home_ssid: Some("Home".into()), ..Default::default() };
         let mut out = Vec::new();
-        wifi_findings(&v, &real, &[], &mut out);
+        wifi_findings(&v, &real, &[], &mut out, Lang::En);
         assert!(!out.iter().any(|f| f.id == "PL-NO-PMF"));
     }
 
@@ -1357,8 +1518,24 @@ mod tests {
         let saved = SavedNetwork { name: "Cafe".into(), ssid: "Cafe".into(), auto_connect: true, open: true, hidden: false, authentication: "open".into() };
         let v = WifiView { home_ssid: Some("Home".into()), saved_open_auto: vec![saved], ..Default::default() };
         let mut out = Vec::new();
-        wifi_findings(&v, &[], &[], &mut out);
+        wifi_findings(&v, &[], &[], &mut out, Lang::En);
         assert!(out.iter().any(|f| f.id == "PL-SAVED-OPEN"));
+    }
+
+    #[test]
+    fn findings_are_written_in_the_chosen_language() {
+        let saved = SavedNetwork { name: "Cafe".into(), ssid: "Cafe".into(), auto_connect: true, open: true, hidden: false, authentication: "open".into() };
+        let v = WifiView { home_ssid: Some("Home".into()), saved_open_auto: vec![saved], ..Default::default() };
+        let (mut fr, mut ar) = (Vec::new(), Vec::new());
+        wifi_findings(&v, &[], &[], &mut fr, Lang::Fr);
+        wifi_findings(&v, &[], &[], &mut ar, Lang::Ar);
+        assert_eq!((fr[0].title.as_str(), ar[0].fix.len()), ("Cet ordinateur rejoint tout seul 1 réseau Wi-Fi ouvert", 2));
+    }
+
+    #[test]
+    fn generated_device_names_follow_the_language() {
+        let d = Device { kind: "camera".into(), vendor: Some("Hikvision".into()), ..Default::default() };
+        assert_eq!(name_of(&d, Lang::Fr), "Caméra Hikvision");
     }
 
     // ---------- device doors ----------
@@ -1368,7 +1545,7 @@ mod tests {
         d.deep = Some(DeepResult { ports: vec![23], ..Default::default() });
         let maps = vec![Mapping { external_port: 2323, internal_client: "10.9.8.5".into(), internal_port: 23, protocol: "TCP".into(), description: String::new() }];
         let mut out = Vec::new();
-        device_findings(&d, &maps, &mut out);
+        device_findings(&d, &maps, &mut out, Lang::En);
         assert!(out[0].likely.starts_with("High"));
     }
 
@@ -1423,11 +1600,11 @@ mod tests {
     #[test]
     fn names_prefer_what_the_user_chose() {
         let mut d = Device { kind: "device".into(), vendor: Some("Apple".into()), ..Default::default() };
-        assert_eq!(name_of(&d), "Apple device");
+        assert_eq!(name_of(&d, Lang::En), "Apple device");
         d.detected_name = Some("Saras-iPhone".into());
-        assert_eq!(name_of(&d), "Saras-iPhone");
+        assert_eq!(name_of(&d, Lang::En), "Saras-iPhone");
         d.custom_name = Some("Mum's phone".into());
-        assert_eq!(name_of(&d), "Mum's phone");
+        assert_eq!(name_of(&d, Lang::En), "Mum's phone");
     }
 
     #[test]

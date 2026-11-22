@@ -19,7 +19,7 @@ It looks; it never breaks in. Windows and Linux, no dependencies, no account, an
 
 ![The Porchlight app saying "Your home is mostly safe", with the next step lit up and numbered, a new device asking "Is it yours?", and a small map of the home](docs/app-overview.png)
 
-**[Download Porchlight 0.6.3 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.3_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights).
+**[Download Porchlight 0.6.4 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.4_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights). In English, French and Arabic: it follows Windows, or pick one in Settings.
 
 A tray app written in Rust ([Tauri](https://tauri.app)) that keeps watching your home network in the background and
 sends a notification when something changes:
@@ -44,6 +44,9 @@ sends a notification when something changes:
   one device announces itself as the IPv6 router.
 - A daily full checkup of every device: Telnet, FTP, SMBv1, Remote Desktop without NLA, open camera streams, Android
   debugging, Docker, VNC, and ports opened to the internet through UPnP.
+- **A device you don't recognise:** press "I don't know it" and Porchlight shows how to get it off your network:
+  change the Wi-Fi password (the sure way), or block it by its hardware address in the router. Porchlight itself never
+  logs in to the router or pushes devices off: it only looks.
 
 **One thing at a time.** The window opens on a plain sentence ("Your home is mostly safe.") and the single next
 thing to do, lit up, with numbered steps and how long it takes. "I did it, check again" runs the checkup again and

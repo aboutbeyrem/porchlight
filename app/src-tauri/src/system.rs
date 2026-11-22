@@ -3,6 +3,8 @@
 //! reserved for testing), which says nothing about you.
 
 use crate::guard::{Device, Finding};
+use crate::i18n::Lang;
+use crate::tx;
 use crate::net::{self, Network};
 use std::collections::{BTreeMap, HashMap};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
@@ -176,8 +178,8 @@ pub fn look(probe: bool) -> Look {
     Look { dns, invents, public_v6, v6_routers }
 }
 
-fn finding(id: &str, level: &str, title: &str, found: String, means: &str, likely: &str, fix: &[&str]) -> Finding {
-    Finding { id: id.into(), level: level.into(), title: title.into(), found, means: means.into(), likely: likely.into(), fix: fix.iter().map(|s| s.to_string()).collect(), device: None }
+fn finding(id: &str, level: &str, title: String, found: String, means: String, likely: String, fix: Vec<String>) -> Finding {
+    Finding { id: id.into(), level: level.into(), title, found, means, likely, fix, device: None }
 }
 
 fn in_subnet(ip: Ipv4Addr, netw: &Network) -> bool {
@@ -185,36 +187,45 @@ fn in_subnet(ip: Ipv4Addr, netw: &Network) -> bool {
 }
 
 /// Findings about this computer's DNS and IPv6, in plain words.
-pub fn findings(look: &Look, netw: &Network, devices: &BTreeMap<String, Device>) -> Vec<Finding> {
+pub fn findings(look: &Look, netw: &Network, devices: &BTreeMap<String, Device>, l: Lang) -> Vec<Finding> {
     let mut out = Vec::new();
     if look.invents == Some(true) {
-        out.push(finding("PL-DNS-INVENTS", "good-to-know", "Your DNS makes up answers for websites that don't exist",
-            "When this computer looks up a website name that doesn't exist, your DNS server answers with an address anyway, instead of \"no such name\".".into(),
-            "Mistyped addresses then open a page chosen by whoever runs that DNS server (often an internet provider's search or ad page). It also shows the answers you get can be changed on the way.",
-            "Low on its own; it's usually your internet provider, not an attacker.",
-            &["Open your router's settings and look for DNS.", "Turn off \"DNS assistance\", \"Search assist\" or similar if offered, or set the DNS servers to a provider you trust (for example 1.1.1.1 or 9.9.9.9)."]));
+        out.push(finding("PL-DNS-INVENTS", "good-to-know",
+            tx!(l, "Your DNS makes up answers for websites that don't exist", "Votre DNS invente des réponses pour des sites qui n'existent pas", "خادم DNS لديك يختلق إجابات لمواقع غير موجودة"),
+            tx!(l, "When this computer looks up a website name that doesn't exist, your DNS server answers with an address anyway, instead of \"no such name\".", "Quand cet ordinateur cherche un nom de site qui n'existe pas, votre serveur DNS répond quand même par une adresse, au lieu de « ce nom n'existe pas ».", "عندما يبحث هذا الحاسوب عن اسم موقع غير موجود، يردّ خادم DNS بعنوان رغم ذلك، بدلاً من \"لا يوجد هذا الاسم\"."),
+            tx!(l, "Mistyped addresses then open a page chosen by whoever runs that DNS server (often an internet provider's search or ad page). It also shows the answers you get can be changed on the way.", "Les adresses mal tapées ouvrent alors une page choisie par celui qui gère ce serveur DNS (souvent une page de recherche ou de publicité du fournisseur d'accès). Cela montre aussi que les réponses peuvent être modifiées en chemin.", "العناوين المكتوبة خطأً تفتح عندها صفحة يختارها من يدير خادم DNS (غالباً صفحة بحث أو إعلانات لمزوّد الإنترنت). وهذا يبيّن أيضاً أن الإجابات يمكن تغييرها في الطريق."),
+            tx!(l, "Low on its own; it's usually your internet provider, not an attacker.", "Faible en soi ; c'est généralement votre fournisseur d'accès, pas un attaquant.", "منخفض بحد ذاته؛ عادةً يكون مزوّد الإنترنت وليس مهاجماً."),
+            vec![tx!(l, "Open your router's settings and look for DNS.", "Ouvrez les réglages de votre routeur et cherchez DNS.", "افتح إعدادات الراوتر وابحث عن DNS."),
+                 tx!(l, "Turn off \"DNS assistance\", \"Search assist\" or similar if offered, or set the DNS servers to a provider you trust (for example 1.1.1.1 or 9.9.9.9).", "Désactivez « Assistance DNS », « Aide à la recherche » ou équivalent si proposé, ou réglez les serveurs DNS sur un fournisseur de confiance (par exemple 1.1.1.1 ou 9.9.9.9).", "أوقف \"DNS assistance\" أو \"Search assist\" أو ما يشبهها إن وُجدت، أو اضبط خوادم DNS على مزوّد تثق به (مثلاً 1.1.1.1 أو 9.9.9.9).")]));
     }
     for ip in look.dns.iter().filter(|ip| in_subnet(**ip, netw) && **ip != netw.gateway) {
-        let who = devices.values().find(|d| d.ip == ip.to_string()).map(|d| d.name.clone()).unwrap_or_else(|| "a device Porchlight hasn't named".into());
-        out.push(finding("PL-DNS-LOCAL", "good-to-know", "Website lookups go through another device on your network",
-            format!("This computer's DNS server is {ip} ({who}), not your router."),
-            "Every website name this computer looks up goes through that device first. That's normal for an ad blocker like Pi-hole; if you didn't set one up, a device may have taken over this job to send you to fake websites.",
-            "Low if you set it up; high if you didn't.",
-            &["If you run an ad blocker or Pi-hole, all good.", "If not: restart your router, then check again. If it stays, unplug the device at that address."]));
+        let who = devices.values().find(|d| d.ip == ip.to_string()).map(|d| d.name.clone()).unwrap_or_else(|| tx!(l, "a device Porchlight hasn't named", "un appareil que Porchlight n'a pas nommé", "جهاز لم يسمّه Porchlight"));
+        out.push(finding("PL-DNS-LOCAL", "good-to-know",
+            tx!(l, "Website lookups go through another device on your network", "La recherche des sites passe par un autre appareil de votre réseau", "البحث عن المواقع يمر عبر جهاز آخر على شبكتك"),
+            tx!(l, format!("This computer's DNS server is {ip} ({who}), not your router."), format!("Le serveur DNS de cet ordinateur est {ip} ({who}), pas votre routeur."), format!("خادم DNS لهذا الحاسوب هو {ip} ({who})، وليس الراوتر.")),
+            tx!(l, "Every website name this computer looks up goes through that device first. That's normal for an ad blocker like Pi-hole; if you didn't set one up, a device may have taken over this job to send you to fake websites.", "Chaque nom de site que cet ordinateur cherche passe d'abord par cet appareil. C'est normal pour un bloqueur de publicités comme Pi-hole ; si vous n'en avez pas installé, un appareil a peut-être pris ce rôle pour vous envoyer vers de faux sites.", "كل اسم موقع يبحث عنه هذا الحاسوب يمر عبر ذلك الجهاز أولاً. هذا طبيعي لمانع إعلانات مثل Pi-hole؛ وإن لم تُعدّ واحداً، فربما استولى جهاز على هذه المهمة ليوجهك إلى مواقع مزيفة."),
+            tx!(l, "Low if you set it up; high if you didn't.", "Faible si c'est vous qui l'avez installé ; élevé sinon.", "منخفض إن كنت أعددته بنفسك؛ مرتفع إن لم تفعل."),
+            vec![tx!(l, "If you run an ad blocker or Pi-hole, all good.", "Si vous utilisez un bloqueur de publicités ou Pi-hole, tout va bien.", "إن كنت تستخدم مانع إعلانات أو Pi-hole، فلا مشكلة."),
+                 tx!(l, "If not: restart your router, then check again. If it stays, unplug the device at that address.", "Sinon : redémarrez votre routeur, puis vérifiez de nouveau. Si cela reste, débranchez l'appareil à cette adresse.", "وإلا: أعد تشغيل الراوتر ثم افحص مجدداً. إن بقي الأمر، افصل الجهاز ذا ذلك العنوان.")]));
     }
     if look.public_v6 {
-        out.push(finding("PL-IPV6-PUBLIC", "good-to-know", "Your network uses IPv6, so devices have their own internet addresses",
-            "This computer has a public IPv6 address. With IPv6, each device can have an address the internet can reach directly, unlike IPv4 where the router hides them.".into(),
-            "Your router's IPv6 firewall is what stops strangers from connecting to your devices. Most routers turn it on by default, but some internet-provider boxes ship with it off.",
-            "Low if the router's IPv6 firewall is on.",
-            &["Open your router's settings → Firewall or IPv6.", "Make sure incoming IPv6 connections are blocked (\"IPv6 firewall: on\" or \"Block inbound\")."]));
+        out.push(finding("PL-IPV6-PUBLIC", "good-to-know",
+            tx!(l, "Your network uses IPv6, so devices have their own internet addresses", "Votre réseau utilise l'IPv6 : les appareils ont leur propre adresse Internet", "شبكتك تستخدم IPv6، لذا لكل جهاز عنوانه الخاص على الإنترنت"),
+            tx!(l, "This computer has a public IPv6 address. With IPv6, each device can have an address the internet can reach directly, unlike IPv4 where the router hides them.", "Cet ordinateur a une adresse IPv6 publique. Avec l'IPv6, chaque appareil peut avoir une adresse joignable directement depuis Internet, contrairement à l'IPv4 où le routeur les cache.", "لهذا الحاسوب عنوان IPv6 عام. مع IPv6 يمكن لكل جهاز أن يحصل على عنوان يصل إليه الإنترنت مباشرة، بخلاف IPv4 حيث يخفيها الراوتر."),
+            tx!(l, "Your router's IPv6 firewall is what stops strangers from connecting to your devices. Most routers turn it on by default, but some internet-provider boxes ship with it off.", "C'est le pare-feu IPv6 du routeur qui empêche des inconnus de se connecter à vos appareils. La plupart des routeurs l'activent par défaut, mais certaines box de fournisseurs sont livrées sans.", "جدار حماية IPv6 في الراوتر هو ما يمنع الغرباء من الاتصال بأجهزتك. معظم الراوترات تفعّله افتراضياً، لكن بعض أجهزة مزوّدي الإنترنت تأتي وهو متوقف."),
+            tx!(l, "Low if the router's IPv6 firewall is on.", "Faible si le pare-feu IPv6 du routeur est actif.", "منخفض إن كان جدار حماية IPv6 في الراوتر مفعّلاً."),
+            vec![tx!(l, "Open your router's settings → Firewall or IPv6.", "Ouvrez les réglages du routeur → Pare-feu ou IPv6.", "افتح إعدادات الراوتر ← جدار الحماية أو IPv6."),
+                 tx!(l, "Make sure incoming IPv6 connections are blocked (\"IPv6 firewall: on\" or \"Block inbound\").", "Vérifiez que les connexions IPv6 entrantes sont bloquées (« Pare-feu IPv6 : activé » ou « Bloquer les entrées »).", "تأكد أن اتصالات IPv6 الواردة محظورة (\"IPv6 firewall: on\" أو \"Block inbound\").")]));
     }
     for routers in competing_routers(&look.v6_routers) {
-        out.push(finding("PL-IPV6-ROUTERS", "worth-fixing", "More than one device is acting as your network's IPv6 router",
-            format!("{} devices are announcing themselves as the way to the IPv6 internet.", routers.len()),
-            "Normally only your router does this. A second one can be a mesh unit or a second router; it's also how some attacks (\"rogue router advertisements\") put a device in the middle of your traffic.",
-            "Low to moderate: usually a second router, sometimes an attack.",
-            &["If you have two routers or a mesh system, turn off IPv6 router announcements (RA) on all but the main one.", "If you don't, restart your router and check again; if it stays, look for a device you don't recognise."]));
+        let n = routers.len();
+        out.push(finding("PL-IPV6-ROUTERS", "worth-fixing",
+            tx!(l, "More than one device is acting as your network's IPv6 router", "Plusieurs appareils jouent le rôle de routeur IPv6 de votre réseau", "أكثر من جهاز يتصرف كراوتر IPv6 لشبكتك"),
+            tx!(l, format!("{n} devices are announcing themselves as the way to the IPv6 internet."), format!("{n} appareils s'annoncent comme le chemin vers l'Internet IPv6."), format!("{n} أجهزة تعلن أنها الطريق إلى إنترنت IPv6.")),
+            tx!(l, "Normally only your router does this. A second one can be a mesh unit or a second router; it's also how some attacks (\"rogue router advertisements\") put a device in the middle of your traffic.", "Normalement, seul votre routeur fait cela. Un second peut être un module mesh ou un second routeur ; c'est aussi ainsi que certaines attaques (« fausses annonces de routeur ») placent un appareil au milieu de votre trafic.", "عادةً لا يفعل هذا سوى الراوتر. قد يكون الثاني وحدة mesh أو راوتر ثانياً؛ وهكذا أيضاً تضع بعض الهجمات (\"إعلانات راوتر مزيفة\") جهازاً في منتصف بياناتك."),
+            tx!(l, "Low to moderate: usually a second router, sometimes an attack.", "Faible à modéré : généralement un second routeur, parfois une attaque.", "منخفض إلى متوسط: عادةً راوتر ثانٍ، وأحياناً هجوم."),
+            vec![tx!(l, "If you have two routers or a mesh system, turn off IPv6 router announcements (RA) on all but the main one.", "Si vous avez deux routeurs ou un système mesh, désactivez les annonces de routeur IPv6 (RA) sur tous sauf le principal.", "إن كان لديك راوتران أو نظام mesh، أوقف إعلانات راوتر IPv6 (RA) على الجميع ما عدا الرئيسي."),
+                 tx!(l, "If you don't, restart your router and check again; if it stays, look for a device you don't recognise.", "Sinon, redémarrez votre routeur et vérifiez de nouveau ; si cela reste, cherchez un appareil que vous ne reconnaissez pas.", "وإلا، أعد تشغيل الراوتر وافحص مجدداً؛ إن بقي الأمر، ابحث عن جهاز لا تعرفه.")]));
     }
     out
 }
@@ -286,7 +297,7 @@ mod tests {
     fn a_dns_server_on_another_local_device_is_mentioned() {
         let netw = Network { address: "10.9.8.20".parse().unwrap(), gateway: "10.9.8.1".parse().unwrap(), cidr: "10.9.8.0/24".into() };
         let look = Look { dns: vec!["10.9.8.53".parse().unwrap(), "10.9.8.1".parse().unwrap()], ..Default::default() };
-        let out = findings(&look, &netw, &BTreeMap::new());
+        let out = findings(&look, &netw, &BTreeMap::new(), Lang::En);
         assert_eq!(out.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(), vec!["PL-DNS-LOCAL"]);
     }
 }
