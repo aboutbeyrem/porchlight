@@ -19,7 +19,7 @@ It looks; it never breaks in. Windows and Linux, no dependencies, no account, an
 
 ![The Porchlight app saying "Your home is mostly safe", with the next step lit up and numbered, a new device asking "Is it yours?", and a small map of the home](docs/app-overview.png)
 
-**[Download Porchlight 0.6.5 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.5_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights). In English, French and Arabic: it follows Windows, or pick one in Settings.
+**[Download Porchlight 0.6.6 for Windows](https://porchlight-beryl.vercel.app/download/Porchlight_0.6.6_x64-setup.exe)** (3 MB, Windows 10 and 11, installs per user without admin rights). In English, French and Arabic: it follows Windows, or pick one in Settings.
 
 A tray app written in Rust ([Tauri](https://tauri.app)) that keeps watching your home network in the background and
 sends a notification when something changes:

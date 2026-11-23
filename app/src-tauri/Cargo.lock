@@ -2954,7 +2954,7 @@ dependencies = [
 
 [[package]]
 name = "porchlight"
-version = "0.6.5"
+version = "0.6.6"
 dependencies = [
  "serde",
  "serde_json",

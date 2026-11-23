@@ -162,18 +162,46 @@ impl State {
     pub fn lang(&self) -> Lang {
         Lang::from_setting(self.settings.lang.as_deref())
     }
+    /// Reads the saved state. If Windows stopped in the middle of a save and left the file empty or zero-filled,
+    /// the previous copy (.bak) is used instead, so a power cut never makes Porchlight forget the home.
     pub fn load(path: &Path) -> State {
-        std::fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_else(|| State { version: 1, ..Default::default() })
+        let read = |p: &Path| std::fs::read_to_string(p).ok().and_then(|s| serde_json::from_str::<State>(&s).ok());
+        if let Some(s) = read(path) {
+            return s;
+        }
+        if path.exists() {
+            crate::log_warn!("the saved state is damaged (probably a shutdown during a save); trying the backup");
+            let _ = std::fs::rename(path, path.with_extension("damaged"));
+        }
+        if let Some(s) = read(&path.with_extension("bak")) {
+            crate::log_info!("restored the saved state from the backup");
+            return s;
+        }
+        State { version: 1, ..Default::default() }
     }
+
+    /// Saves without ever leaving a broken file: the new state goes to a temporary file that is forced onto the
+    /// disk first, the current file becomes the backup, and only then the new one takes its place.
     pub fn save(&self, path: &Path) {
+        use std::io::Write;
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        if let Ok(s) = serde_json::to_string_pretty(self) {
-            let tmp = path.with_extension("tmp");
-            if std::fs::write(&tmp, s).is_ok() {
-                let _ = std::fs::rename(&tmp, path);
-            }
+        let Ok(s) = serde_json::to_string_pretty(self) else { return };
+        let tmp = path.with_extension("tmp");
+        let written = std::fs::File::create(&tmp).and_then(|mut f| {
+            f.write_all(s.as_bytes())?;
+            f.sync_all()
+        });
+        if let Err(e) = written {
+            crate::log_warn!("couldn't save the state: {e}");
+            return;
+        }
+        if path.exists() {
+            let _ = std::fs::rename(path, path.with_extension("bak"));
+        }
+        if let Err(e) = std::fs::rename(&tmp, path) {
+            crate::log_warn!("couldn't put the saved state in place: {e}");
         }
     }
     fn alert(&mut self, level: &str, title: String, body: String, device: Option<String>) -> Alert {
@@ -1530,6 +1558,35 @@ mod tests {
         wifi_findings(&v, &[], &[], &mut fr, Lang::Fr);
         wifi_findings(&v, &[], &[], &mut ar, Lang::Ar);
         assert_eq!((fr[0].title.as_str(), ar[0].fix.len()), ("Cet ordinateur rejoint tout seul 1 réseau Wi-Fi ouvert", 2));
+    }
+
+    fn scratch_dir(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("porchlight-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn a_zero_filled_state_file_falls_back_to_the_backup() {
+        let dir = scratch_dir("zeros");
+        let path = dir.join("porchlight-state.json");
+        let mut s = State { version: 1, ..Default::default() };
+        s.settings.consented = true;
+        s.save(&path);
+        s.save(&path); // the second save turns the first into the backup
+        std::fs::write(&path, vec![0u8; 14_360]).unwrap(); // what a shutdown mid-save leaves behind
+        assert!(State::load(&path).settings.consented);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn saving_leaves_no_temporary_file_behind() {
+        let dir = scratch_dir("tmp");
+        let path = dir.join("porchlight-state.json");
+        State { version: 1, ..Default::default() }.save(&path);
+        assert_eq!((path.exists(), path.with_extension("tmp").exists()), (true, false));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
